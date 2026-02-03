@@ -23,15 +23,6 @@ The plugin implements three Navidrome capabilities:
 | **WebSocketCallback** | Handles incoming Discord gateway messages (heartbeat ACKs, sequence numbers) |
 | **SchedulerCallback** | Processes scheduled events for heartbeats and presence clearing              |
 
-### Files
-
-| File                           | Description                                                            |
-|--------------------------------|------------------------------------------------------------------------|
-| [main.go](main.go)             | Plugin entry point, scrobbler and scheduler implementations            |
-| [rpc.go](rpc.go)               | Discord gateway communication, WebSocket handling, activity management |
-| [manifest.json](manifest.json) | Plugin metadata and permission declarations                            |
-| [Makefile](Makefile)           | Build automation                                                       |
-
 ### Host Services
 
 | Service       | Usage                                                               |
@@ -40,7 +31,7 @@ The plugin implements three Navidrome capabilities:
 | **WebSocket** | Persistent connection to Discord gateway                            |
 | **Cache**     | Sequence numbers, processed image URLs                              |
 | **Scheduler** | Recurring heartbeats, one-time presence clearing                    |
-| **Artwork**   | Track artwork URL resolution                                        |
+| **Artwork**   | Track artwork public URL resolution                                 |
 
 ### Flow
 
@@ -68,6 +59,15 @@ Discord requires images to be registered via their external assets API. The plug
 3. Caches the result (4 hours for track art, 48 hours for default image)
 4. Falls back to a default image if artwork is unavailable
 
+### Files
+
+| File                           | Description                                                            |
+|--------------------------------|------------------------------------------------------------------------|
+| [main.go](main.go)             | Plugin entry point, scrobbler and scheduler implementations            |
+| [rpc.go](rpc.go)               | Discord gateway communication, WebSocket handling, activity management |
+| [manifest.json](manifest.json) | Plugin metadata and permission declarations                            |
+| [Makefile](Makefile)           | Build automation                                                       |
+
 ## Configuration
 
 Configure via the Navidrome UI under **Settings > Plugins > Discord Rich Presence**:
@@ -77,16 +77,6 @@ Configure via the Navidrome UI under **Settings > Plugins > Discord Rich Presenc
 | **Client ID** | Your Discord Application ID (create at [Discord Developer Portal](https://discord.com/developers/applications)) |
 | **Users**     | Array of username/token pairs mapping Navidrome users to Discord tokens                                         |
 
-Example JSON configuration:
-```json
-{
-  "clientid": "123456789012345678",
-  "users": [
-    {"username": "alice", "token": "discord-token-here"},
-    {"username": "bob", "token": "another-discord-token"}
-  ]
-}
-```
 
 ## Building
 
@@ -101,19 +91,19 @@ make test
 # Build plugin.wasm
 make build
 
-# Create distributable package
+# Create distributable plugin package
 make package
 ```
 
 The `make package` command creates `discord-rich-presence.ndp` containing the compiled WebAssembly module and manifest.
 
-Manual build:
+### Manual build:
 ```sh
 tinygo build -target wasip1 -buildmode=c-shared -o plugin.wasm -scheduler=none .
 zip discord-rich-presence.ndp plugin.wasm manifest.json
 ```
 
-Using standard Go:
+### Using standard Go:
 ```sh
 GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .
 zip discord-rich-presence.ndp plugin.wasm manifest.json
