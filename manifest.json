@@ -86,7 +86,10 @@
                 },
                 {
                   "type": "Control",
-                  "scope": "#/properties/token"
+                  "scope": "#/properties/token",
+                  "options": {
+                    "format": "password"
+                  }
                 }
               ]
             }
