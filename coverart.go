@@ -1,29 +1,16 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 )
 
-// Configuration keys for image hosting
-const (
-	imageHostKey   = "imagehost"
-	imgbbApiKeyKey = "imgbbapikey"
-)
-
-// imgbb API response
-type imgbbResponse struct {
-	Data struct {
-		DisplayURL string `json:"display_url"`
-	} `json:"data"`
-	Success bool `json:"success"`
-}
+// Configuration key for uguu.se image hosting
+const uguuEnabledKey = "uguuenabled"
 
 // uguu.se API response
 type uguuResponse struct {
@@ -33,18 +20,13 @@ type uguuResponse struct {
 	} `json:"files"`
 }
 
-// getImageURL retrieves the track artwork URL, optionally uploading to a public image host.
+// getImageURL retrieves the track artwork URL, optionally uploading to uguu.se.
 func getImageURL(username, trackID string) string {
-	imageHost, _ := pdk.GetConfig(imageHostKey)
-
-	switch imageHost {
-	case "imgbb":
-		return getImageViaImgbb(username, trackID)
-	case "uguu":
+	uguuEnabled, _ := pdk.GetConfig(uguuEnabledKey)
+	if uguuEnabled == "true" {
 		return getImageViaUguu(username, trackID)
-	default:
-		return getImageDirect(trackID)
 	}
+	return getImageDirect(trackID)
 }
 
 // getImageDirect returns the artwork URL directly from Navidrome (current behavior).
@@ -62,16 +44,13 @@ func getImageDirect(trackID string) string {
 	return artworkURL
 }
 
-// uploadFunc uploads image data to an external host and returns the public URL.
-type uploadFunc func(contentType string, data []byte) (string, error)
-
-// getImageViaHost fetches artwork and uploads it using the provided upload function.
-func getImageViaHost(provider, username, trackID string, cacheTTL int64, upload uploadFunc) string {
+// getImageViaUguu fetches artwork and uploads it to uguu.se.
+func getImageViaUguu(username, trackID string) string {
 	// Check cache first
-	cacheKey := fmt.Sprintf("%s.artwork.%s", provider, trackID)
+	cacheKey := fmt.Sprintf("uguu.artwork.%s", trackID)
 	cachedURL, exists, err := host.CacheGetString(cacheKey)
 	if err == nil && exists {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for %s artwork: %s", provider, trackID))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for uguu artwork: %s", trackID))
 		return cachedURL
 	}
 
@@ -82,65 +61,15 @@ func getImageViaHost(provider, username, trackID string, cacheTTL int64, upload 
 		return ""
 	}
 
-	// Upload to external host
-	url, err := upload(contentType, data)
+	// Upload to uguu.se
+	url, err := uploadToUguu(data, contentType)
 	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to upload to %s: %v", provider, err))
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to upload to uguu.se: %v", err))
 		return ""
 	}
 
-	_ = host.CacheSetString(cacheKey, url, cacheTTL)
+	_ = host.CacheSetString(cacheKey, url, 9000)
 	return url
-}
-
-// getImageViaImgbb fetches artwork and uploads it to imgbb.
-func getImageViaImgbb(username, trackID string) string {
-	apiKey, ok := pdk.GetConfig(imgbbApiKeyKey)
-	if !ok || apiKey == "" {
-		pdk.Log(pdk.LogWarn, "imgbb image host selected but no API key configured")
-		return ""
-	}
-
-	return getImageViaHost("imgbb", username, trackID, 82800, func(_ string, data []byte) (string, error) {
-		return uploadToImgbb(apiKey, data)
-	})
-}
-
-// getImageViaUguu fetches artwork and uploads it to uguu.se.
-func getImageViaUguu(username, trackID string) string {
-	return getImageViaHost("uguu", username, trackID, 9000, func(contentType string, data []byte) (string, error) {
-		return uploadToUguu(data, contentType)
-	})
-}
-
-// uploadToImgbb uploads image data to imgbb and returns the display URL.
-func uploadToImgbb(apiKey string, imageData []byte) (string, error) {
-	encoded := base64.StdEncoding.EncodeToString(imageData)
-	body := fmt.Sprintf("key=%s&image=%s&expiration=86400", url.QueryEscape(apiKey), url.QueryEscape(encoded))
-
-	req := pdk.NewHTTPRequest(pdk.MethodPost, "https://api.imgbb.com/1/upload")
-	req.SetHeader("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBody([]byte(body))
-
-	resp := req.Send()
-	if resp.Status() >= 400 {
-		return "", fmt.Errorf("imgbb upload failed: HTTP %d", resp.Status())
-	}
-
-	var result imgbbResponse
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return "", fmt.Errorf("failed to parse imgbb response: %w", err)
-	}
-
-	if !result.Success {
-		return "", fmt.Errorf("imgbb upload was not successful")
-	}
-
-	if result.Data.DisplayURL == "" {
-		return "", fmt.Errorf("imgbb returned empty display URL")
-	}
-
-	return result.Data.DisplayURL, nil
 }
 
 // uploadToUguu uploads image data to uguu.se and returns the file URL.

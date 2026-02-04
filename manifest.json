@@ -11,7 +11,7 @@
     },
     "http": {
       "reason": "To communicate with Discord API for gateway discovery and image uploads",
-      "requiredHosts": ["discord.com", "api.imgbb.com", "uguu.se"]
+      "requiredHosts": ["discord.com", "uguu.se"]
     },
     "websocket": {
       "reason": "To maintain real-time connection with Discord gateway",
@@ -42,16 +42,10 @@
           "maxLength": 20,
           "pattern": "^[0-9]+$"
         },
-        "imagehost": {
-          "type": "string",
-          "title": "Image Hosting Service",
-          "description": "Upload artwork to a public image host so Discord can display it. Required when Navidrome is not publicly accessible.",
-          "enum": ["", "imgbb", "uguu"]
-        },
-        "imgbbapikey": {
-          "type": "string",
-          "title": "imgbb API Key",
-          "description": "API key from imgbb.com. Get one at https://api.imgbb.com/"
+        "uguuenabled": {
+          "type": "boolean",
+          "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
+          "default": false
         },
         "users": {
           "type": "array",
@@ -89,19 +83,7 @@
         },
         {
           "type": "Control",
-          "scope": "#/properties/imagehost"
-        },
-        {
-          "type": "Control",
-          "scope": "#/properties/imgbbapikey",
-          "options": { "format": "password" },
-          "rule": {
-            "effect": "SHOW",
-            "condition": {
-              "scope": "#/properties/imagehost",
-              "schema": { "const": "imgbb" }
-            }
-          }
+          "scope": "#/properties/uguuenabled"
         },
         {
           "type": "Control",

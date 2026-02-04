@@ -23,9 +23,9 @@ var _ = Describe("getImageURL", func() {
 		pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
 	})
 
-	Describe("no image host configured", func() {
+	Describe("uguu disabled (default)", func() {
 		BeforeEach(func() {
-			pdk.PDKMock.On("GetConfig", imageHostKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
 		})
 
 		It("returns artwork URL directly", func() {
@@ -50,77 +50,9 @@ var _ = Describe("getImageURL", func() {
 		})
 	})
 
-	Describe("imgbb image host", func() {
+	Describe("uguu enabled", func() {
 		BeforeEach(func() {
-			pdk.PDKMock.On("GetConfig", imageHostKey).Return("imgbb", true)
-		})
-
-		It("returns cached URL when available", func() {
-			pdk.PDKMock.On("GetConfig", imgbbApiKeyKey).Return("test-api-key", true)
-			host.CacheMock.On("GetString", "imgbb.artwork.track1").Return("https://i.ibb.co/cached.jpg", true, nil)
-
-			url := getImageURL("testuser", "track1")
-			Expect(url).To(Equal("https://i.ibb.co/cached.jpg"))
-		})
-
-		It("uploads artwork and caches the result", func() {
-			pdk.PDKMock.On("GetConfig", imgbbApiKeyKey).Return("test-api-key", true)
-			host.CacheMock.On("GetString", "imgbb.artwork.track1").Return("", false, nil)
-
-			// Mock SubsonicAPICallRaw
-			imageData := []byte("fake-image-data")
-			host.SubsonicAPIMock.On("CallRaw", "/getCoverArt?u=testuser&id=track1&size=300").
-				Return("image/jpeg", imageData, nil)
-
-			// Mock imgbb HTTP upload
-			imgbbReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://api.imgbb.com/1/upload").Return(imgbbReq)
-			pdk.PDKMock.On("Send", imgbbReq).Return(pdk.NewStubHTTPResponse(200, nil,
-				[]byte(`{"success":true,"data":{"display_url":"https://i.ibb.co/uploaded.jpg"}}`)))
-
-			// Mock cache set
-			host.CacheMock.On("SetString", "imgbb.artwork.track1", "https://i.ibb.co/uploaded.jpg", int64(82800)).Return(nil)
-
-			url := getImageURL("testuser", "track1")
-			Expect(url).To(Equal("https://i.ibb.co/uploaded.jpg"))
-			host.CacheMock.AssertCalled(GinkgoT(), "SetString", "imgbb.artwork.track1", "https://i.ibb.co/uploaded.jpg", int64(82800))
-		})
-
-		It("returns empty when no API key configured", func() {
-			pdk.PDKMock.On("GetConfig", imgbbApiKeyKey).Return("", false)
-
-			url := getImageURL("testuser", "track1")
-			Expect(url).To(BeEmpty())
-		})
-
-		It("returns empty when artwork data fetch fails", func() {
-			pdk.PDKMock.On("GetConfig", imgbbApiKeyKey).Return("test-api-key", true)
-			host.CacheMock.On("GetString", "imgbb.artwork.track1").Return("", false, nil)
-			host.SubsonicAPIMock.On("CallRaw", "/getCoverArt?u=testuser&id=track1&size=300").
-				Return("", []byte(nil), errors.New("fetch failed"))
-
-			url := getImageURL("testuser", "track1")
-			Expect(url).To(BeEmpty())
-		})
-
-		It("returns empty when imgbb upload fails", func() {
-			pdk.PDKMock.On("GetConfig", imgbbApiKeyKey).Return("test-api-key", true)
-			host.CacheMock.On("GetString", "imgbb.artwork.track1").Return("", false, nil)
-			host.SubsonicAPIMock.On("CallRaw", "/getCoverArt?u=testuser&id=track1&size=300").
-				Return("image/jpeg", []byte("fake-image-data"), nil)
-
-			imgbbReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://api.imgbb.com/1/upload").Return(imgbbReq)
-			pdk.PDKMock.On("Send", imgbbReq).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`{"success":false}`)))
-
-			url := getImageURL("testuser", "track1")
-			Expect(url).To(BeEmpty())
-		})
-	})
-
-	Describe("uguu image host", func() {
-		BeforeEach(func() {
-			pdk.PDKMock.On("GetConfig", imageHostKey).Return("uguu", true)
+			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("true", true)
 		})
 
 		It("returns cached URL when available", func() {

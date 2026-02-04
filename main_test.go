@@ -118,7 +118,7 @@ var _ = Describe("discordPlugin", func() {
 		It("successfully sends now playing update", func() {
 			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
-			pdk.PDKMock.On("GetConfig", imageHostKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
 
 			// Connect mocks (isConnected check via heartbeat)
 			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
