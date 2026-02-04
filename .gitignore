@@ -1,2 +1,3 @@
 *.wasm
 *.ndp
+tmp
