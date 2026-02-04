@@ -91,21 +91,6 @@ func getConfig() (clientID string, users map[string]string, err error) {
 	return clientID, users, nil
 }
 
-// getImageURL retrieves the track artwork URL.
-func getImageURL(trackID string) string {
-	artworkURL, err := host.ArtworkGetTrackUrl(trackID, 300)
-	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to get artwork URL: %v", err))
-		return ""
-	}
-
-	// Don't use localhost URLs
-	if strings.HasPrefix(artworkURL, "http://localhost") {
-		return ""
-	}
-	return artworkURL
-}
-
 // ============================================================================
 // Scrobbler Implementation
 // ============================================================================
@@ -163,7 +148,7 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 			End:   endTime,
 		},
 		Assets: activityAssets{
-			LargeImage: getImageURL(input.Track.ID),
+			LargeImage: getImageURL(input.Username, input.Track.ID),
 			LargeText:  input.Track.Album,
 		},
 	}); err != nil {

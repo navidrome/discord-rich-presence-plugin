@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"strings"
-	"testing"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
@@ -14,11 +13,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-func TestDiscordPlugin(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Discord Plugin Main Suite")
-}
 
 var _ = Describe("discordPlugin", func() {
 	var plugin discordPlugin
@@ -36,6 +30,8 @@ var _ = Describe("discordPlugin", func() {
 		host.SchedulerMock.Calls = nil
 		host.ArtworkMock.ExpectedCalls = nil
 		host.ArtworkMock.Calls = nil
+		host.SubsonicAPIMock.ExpectedCalls = nil
+		host.SubsonicAPIMock.Calls = nil
 	})
 
 	Describe("getConfig", func() {
@@ -122,6 +118,7 @@ var _ = Describe("discordPlugin", func() {
 		It("successfully sends now playing update", func() {
 			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
+			pdk.PDKMock.On("GetConfig", imageHostKey).Return("", false)
 
 			// Connect mocks (isConnected check via heartbeat)
 			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
