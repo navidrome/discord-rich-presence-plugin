@@ -3,7 +3,11 @@
 [![Build](https://github.com/navidrome/discord-rich-presence-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/navidrome/discord-rich-presence-plugin/actions/workflows/build.yml)
 [![Latest](https://img.shields.io/github/v/release/navidrome/discord-rich-presence-plugin)](https://github.com/navidrome/discord-rich-presence-plugin/releases/latest/download/discord-rich-presence.ndp)
 
-This plugin integrates Navidrome with Discord Rich Presence, displaying your currently playing track in your Discord status. It demonstrates how a Navidrome plugin can maintain real-time connections to external services while remaining completely stateless. Based on the [Navicord](https://github.com/logixism/navicord) project.
+This plugin integrates Navidrome with Discord Rich Presence, displaying your currently playing track in your Discord status. 
+The goal is to demonstrate the capabilities of Navidrome's plugin system by implementing a real-time presence feature using Discord's Gateway API.
+It demonstrates how a Navidrome plugin can maintain real-time connections to external services while remaining completely stateless. 
+
+Based on the [Navicord](https://github.com/logixism/navicord) project.
 
 **⚠️ WARNING: This plugin requires storing Discord user tokens, which may violate Discord's Terms of Service. Use at your own risk.**
 
@@ -13,6 +17,17 @@ This plugin integrates Navidrome with Discord Rich Presence, displaying your cur
 - Displays playback progress with start/end timestamps
 - Automatic presence clearing when track finishes
 - Multi-user support with individual Discord tokens
+
+<img height="550" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/screenshot.png">
+
+
+## Installation
+
+1. Copy the `discord-rich-presence.ndp` file from the [releases page](https://github.com/navidrome/discord-rich-presence-plugin/releases) to your Navidrome plugins folder (default is `plugins/` under the Navidrome data directory).
+2. Configure the plugin in **Settings > Plugins > Discord Rich Presence**
+3. Enable the plugin
+
+There is no need to restart Navidrome; Check the logs for any errors during initialization.
 
 ## How It Works
 
@@ -111,12 +126,3 @@ zip discord-rich-presence.ndp plugin.wasm manifest.json
 GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .
 zip discord-rich-presence.ndp plugin.wasm manifest.json
 ```
-
-## Installation
-
-1. Copy the `discord-rich-presence.ndp` file to your Navidrome plugins folder (default is `plugins/` under the Navidrome data directory).
-2. Configure the plugin in **Settings > Plugins > Discord Rich Presence**
-3. Enable the plugin
-
-There is no need to restart Navidrome; Check the logs for any errors during initialization.
-
