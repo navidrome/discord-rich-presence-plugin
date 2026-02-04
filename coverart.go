@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
@@ -115,7 +116,7 @@ func getImageViaUguu(username, trackID string) string {
 // uploadToImgbb uploads image data to imgbb and returns the display URL.
 func uploadToImgbb(apiKey string, imageData []byte) (string, error) {
 	encoded := base64.StdEncoding.EncodeToString(imageData)
-	body := fmt.Sprintf("key=%s&image=%s&expiration=86400", apiKey, encoded)
+	body := fmt.Sprintf("key=%s&image=%s&expiration=86400", url.QueryEscape(apiKey), url.QueryEscape(encoded))
 
 	req := pdk.NewHTTPRequest(pdk.MethodPost, "https://api.imgbb.com/1/upload")
 	req.SetHeader("Content-Type", "application/x-www-form-urlencoded")

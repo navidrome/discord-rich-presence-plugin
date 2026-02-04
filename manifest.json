@@ -46,7 +46,7 @@
           "type": "string",
           "title": "Image Hosting Service",
           "description": "Upload artwork to a public image host so Discord can display it. Required when Navidrome is not publicly accessible.",
-          "enum": ["imgbb", "uguu"]
+          "enum": ["", "imgbb", "uguu"]
         },
         "imgbbapikey": {
           "type": "string",
