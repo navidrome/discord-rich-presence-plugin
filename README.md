@@ -31,9 +31,9 @@ Important: Remember to configure your account in Discord to share activity statu
 - Go to **User Settings > Activity Privacy**
 - Enable **Share my activity**
 
-Currently album art can only be displayed if your Navidrome instance is public. Additionally you must set the ND_BASEURL config to your public facing URL. 
-
 There is no need to restart Navidrome; Check the logs for any errors during initialization.
+
+Note: Currently album art can only be displayed if your Navidrome instance is public. Additionally you must set the ND_BASEURL config to your public facing URL. Once this is complete you will need to restart Navidrome for the change to take effect.
 
 ## How It Works
 
