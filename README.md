@@ -17,6 +17,7 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 - Displays playback progress with start/end timestamps
 - Automatic presence clearing when track finishes
 - Multi-user support with individual Discord tokens
+- Optional image hosting via [uguu.se](https://uguu.se) for non-public Navidrome instances
 
 <img height="550" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/screenshot.png">
 
@@ -49,13 +50,14 @@ The plugin implements three Navidrome capabilities:
 
 ### Host Services
 
-| Service       | Usage                                                               |
-|---------------|---------------------------------------------------------------------|
-| **HTTP**      | Discord API calls (gateway discovery, external assets registration) |
-| **WebSocket** | Persistent connection to Discord gateway                            |
-| **Cache**     | Sequence numbers, processed image URLs                              |
-| **Scheduler** | Recurring heartbeats, one-time presence clearing                    |
-| **Artwork**   | Track artwork public URL resolution                                 |
+| Service         | Usage                                                               |
+|-----------------|---------------------------------------------------------------------|
+| **HTTP**        | Discord API calls (gateway discovery, external assets registration) |
+| **WebSocket**   | Persistent connection to Discord gateway                            |
+| **Cache**       | Sequence numbers, processed image URLs                              |
+| **Scheduler**   | Recurring heartbeats, one-time presence clearing                    |
+| **Artwork**     | Track artwork public URL resolution                                 |
+| **SubsonicAPI** | Fetches track artwork data for image hosting upload                 |
 
 ### Flow
 
@@ -83,12 +85,15 @@ Discord requires images to be registered via their external assets API. The plug
 3. Caches the result (4 hours for track art, 48 hours for default image)
 4. Falls back to a default image if artwork is unavailable
 
+**For non-public Navidrome instances**: If your server isn't publicly accessible (e.g., behind a VPN or firewall), enable the "Upload to uguu.se" option. This uploads artwork to a temporary file host so Discord can display it.
+
 ### Files
 
 | File                           | Description                                                            |
 |--------------------------------|------------------------------------------------------------------------|
 | [main.go](main.go)             | Plugin entry point, scrobbler and scheduler implementations            |
 | [rpc.go](rpc.go)               | Discord gateway communication, WebSocket handling, activity management |
+| [coverart.go](coverart.go)     | Artwork URL handling and optional uguu.se image hosting                |
 | [manifest.json](manifest.json) | Plugin metadata and permission declarations                            |
 | [Makefile](Makefile)           | Build automation                                                       |
 
@@ -96,10 +101,11 @@ Discord requires images to be registered via their external assets API. The plug
 
 Configure via the Navidrome UI under **Settings > Plugins > Discord Rich Presence**:
 
-| Field         | Description                                                                                                     |
-|---------------|-----------------------------------------------------------------------------------------------------------------|
-| **Client ID** | Your Discord Application ID (create at [Discord Developer Portal](https://discord.com/developers/applications)) |
-| **Users**     | Array of username/token pairs mapping Navidrome users to Discord tokens                                         |
+| Field                 | Description                                                                                                     |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------|
+| **Client ID**         | Your Discord Application ID (create at [Discord Developer Portal](https://discord.com/developers/applications)) |
+| **Upload to uguu.se** | Enable if your Navidrome instance isn't publicly accessible (uploads artwork to temporary file host)            |
+| **Users**             | Array of username/token pairs mapping Navidrome users to Discord tokens                                         |
 
 
 ## Building
