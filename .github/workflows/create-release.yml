@@ -1,0 +1,54 @@
+name: Create Release
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Release version (e.g., 1.2.3, without the 'v' prefix)"
+                required: true
+                type: string
+
+permissions:
+    contents: write
+
+jobs:
+    create-release:
+        name: Create Release Tag
+        runs-on: ubuntu-latest
+        steps:
+            - name: Validate version format
+              run: |
+                  if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+                    echo "::error::Invalid version format '${{ inputs.version }}'. Use X.X.X (e.g., 1.2.3)"
+                    exit 1
+                  fi
+
+            - name: Check tag does not already exist
+              run: |
+                  if git ls-remote --tags origin "refs/tags/v${{ inputs.version }}" | grep -q .; then
+                    echo "::error::Tag v${{ inputs.version }} already exists"
+                    exit 1
+                  fi
+
+            - name: Check out code
+              uses: actions/checkout@v5
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
+
+            - name: Run tests
+              run: go test -race ./...
+
+            - name: Update manifest.json version
+              run: sed -i 's/"version": *"[^"]*"/"version": "${{ inputs.version }}"/' manifest.json
+
+            - name: Commit, tag, and push
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git add manifest.json
+                  git commit -m "Release v${{ inputs.version }}"
+                  git tag "v${{ inputs.version }}"
+                  git push origin main "v${{ inputs.version }}"
