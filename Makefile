@@ -16,15 +16,8 @@ package: build
 clean:
 	rm -f $(WASM_FILE) $(PLUGIN_NAME).ndp
 
-release: test
+release:
 	@if [[ ! "${V}" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$$ ]]; then echo "Usage: make release V=X.X.X"; exit 1; fi
-	go mod tidy
-	@if [ -n "`git status -s`" ]; then echo "\n\nThere are pending changes. Please commit or stash first"; exit 1; fi
-	@if [[ "$$(git branch --show-current)" != "main" ]]; then echo "Releases must be created from the main branch"; exit 1; fi
-	@# Update version in manifest.json
-	@sed -i 's/"version": *"[^"]*"/"version": "${V}"/' manifest.json
-	git add manifest.json
-	git commit -m "Release v${V}" --allow-empty --no-verify
-	git tag v${V}
-	git push origin main v${V} --no-verify
+	gh workflow run create-release.yml -f version=${V}
+	@echo "Release v${V} workflow triggered. Check progress: gh run list --workflow=create-release.yml"
 .PHONY: release
