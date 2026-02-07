@@ -16,6 +16,15 @@ jobs:
             - name: Check out code
               uses: actions/checkout@v5
 
+            - name: Verify manifest version matches tag
+              run: |
+                  TAG_VERSION="${GITHUB_REF_NAME#v}"
+                  MANIFEST_VERSION=$(grep -oP '"version"\s*:\s*"\K[^"]+' manifest.json)
+                  if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+                    echo "::error::Tag version ($TAG_VERSION) does not match manifest.json version ($MANIFEST_VERSION)"
+                    exit 1
+                  fi
+
             - name: Set up Go
               uses: actions/setup-go@v5
               with:
