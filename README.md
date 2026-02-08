@@ -59,11 +59,6 @@ In Discord, ensure your activity is visible to others:
 
 For album artwork to display in Discord, Discord needs to be able to access the image. Choose one of these options:
 
-### Decision Guide
-**Is your Navidrome accessible from the internet?**
-- ✅ **YES** → Use Option 1 (Public Instance)
-- ❌ **NO** (local network, VPN, private server) → Use Option 2 (uguu.se Upload)
-
 ### Option 1: Public Navidrome Instance
 **Use this if**: Your Navidrome server can be reached from the internet
 
