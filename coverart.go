@@ -9,8 +9,11 @@ import (
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 )
 
-// Configuration key for uguu.se image hosting
-const uguuEnabledKey = "uguuenabled"
+const cacheKeyFormat = "artwork.%s"
+
+// ============================================================================
+// uguu.se
+// ============================================================================
 
 // uguu.se API response
 type uguuResponse struct {
@@ -18,15 +21,6 @@ type uguuResponse struct {
 	Files   []struct {
 		URL string `json:"url"`
 	} `json:"files"`
-}
-
-// getImageURL retrieves the track artwork URL, optionally uploading to uguu.se.
-func getImageURL(username, trackID string) string {
-	uguuEnabled, _ := pdk.GetConfig(uguuEnabledKey)
-	if uguuEnabled == "true" {
-		return getImageViaUguu(username, trackID)
-	}
-	return getImageDirect(trackID)
 }
 
 // getImageDirect returns the artwork URL directly from Navidrome (current behavior).
@@ -46,14 +40,6 @@ func getImageDirect(trackID string) string {
 
 // getImageViaUguu fetches artwork and uploads it to uguu.se.
 func getImageViaUguu(username, trackID string) string {
-	// Check cache first
-	cacheKey := fmt.Sprintf("uguu.artwork.%s", trackID)
-	cachedURL, exists, err := host.CacheGetString(cacheKey)
-	if err == nil && exists {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for uguu artwork: %s", trackID))
-		return cachedURL
-	}
-
 	// Fetch artwork data from Navidrome
 	contentType, data, err := host.SubsonicAPICallRaw(fmt.Sprintf("/getCoverArt?u=%s&id=%s&size=300", username, trackID))
 	if err != nil {
@@ -68,7 +54,9 @@ func getImageViaUguu(username, trackID string) string {
 		return ""
 	}
 
+	cacheKey := fmt.Sprintf(cacheKeyFormat, trackID)
 	_ = host.CacheSetString(cacheKey, url, 9000)
+
 	return url
 }
 
@@ -107,4 +95,154 @@ func uploadToUguu(imageData []byte, contentType string) (string, error) {
 	}
 
 	return result.Files[0].URL, nil
+}
+
+// ============================================================================
+// Cover Art Archive
+// ============================================================================
+
+type subsonicGetSongResponse struct {
+	Data struct {
+		Song struct {
+			AlbumID string `json:"albumId"`
+		} `json:"song"`
+	} `json:"subsonic-response"`
+}
+
+type subsonicGetAlbumResponse struct {
+	Data struct {
+		Song struct {
+			MusicBrainzId string `json:"musicBrainzId"`
+		} `json:"album"`
+	} `json:"subsonic-response"`
+}
+
+// https://musicbrainz.org/doc/Cover_Art_Archive/API
+type caaResponse struct {
+	Images []struct {
+		Front              bool   `json:"front"`
+		Back               bool   `json:"back"`
+		ImageURL           string `json:"image"`
+		ThumbnailImageURLs struct {
+			Size250  string `json:"250"`
+			Size500  string `json:"500"`
+			Size1200 string `json:"1200"`
+			Small    string `json:"small"` // deprecated; use 250
+			Large    string `json:"large"` // deprecated; use 500
+		} `json:"thumbnails"`
+	} `json:"images"`
+	ReleaseURL string `json:"release"`
+}
+
+func getAlbumIDFromTrackID(username, trackID string) (string, error) {
+	data, err := host.SubsonicAPICall(fmt.Sprintf("getSong?u=%s&id=%s", username, trackID))
+	if err != nil {
+		return "", fmt.Errorf("getSong failed: %w", err)
+	}
+
+	var response subsonicGetSongResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return "", fmt.Errorf("failed to parse getSong response: %w", err)
+	}
+
+	return response.Data.Song.AlbumID, nil
+}
+
+func getMusicBrainzIDFromAlbumID(username, albumID string) (string, error) {
+	data, err := host.SubsonicAPICall(fmt.Sprintf("getAlbum?u=%s&id=%s", username, albumID))
+	if err != nil {
+		return "", fmt.Errorf("getAlbum failed: %w", err)
+	}
+
+	var response subsonicGetAlbumResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return "", fmt.Errorf("failed to parse getAlbum response: %w", err)
+	}
+
+	return response.Data.Song.MusicBrainzId, nil
+}
+
+func fetchImageFromCAA(username, trackID string) (string, error) {
+	albumID, err := getAlbumIDFromTrackID(username, trackID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get album ID from track ID %s: %w", trackID, err)
+	}
+
+	musicBrainzID, err := getMusicBrainzIDFromAlbumID(username, albumID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get MusicBrainz ID from album ID %s: %w", trackID, err)
+	}
+	if musicBrainzID == "" { // TODO: Check for nil as well
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("No MusicBrainz ID for album %s", albumID))
+		return "", nil
+	}
+
+	req := pdk.NewHTTPRequest(pdk.MethodGet, fmt.Sprintf("https://coverartarchive.org/release/%s", musicBrainzID))
+	resp := req.Send()
+
+	status := resp.Status()
+	if status == 404 {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("No cover art for MusicBrainz ID %s", musicBrainzID))
+		return "", nil
+	}
+	if status >= 400 {
+		return "", fmt.Errorf("Cover Art Archive request failed: HTTP %d", resp.Status())
+	}
+
+	var result caaResponse
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		return "", fmt.Errorf("failed to parse Cover Art Archive response: %w", err)
+	}
+
+	for _, image := range result.Images {
+		if image.Front {
+			return image.ThumbnailImageURLs.Size250, nil
+		}
+	}
+
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("No viable cover art for MusicBrainz ID %s (%d images)", musicBrainzID, len(result.Images)))
+	return "", nil
+}
+
+func getImageViaCAA(username, trackID string) string {
+	url, err := fetchImageFromCAA(username, trackID)
+	if err != nil {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to get image from Cover Art archive: %v", err))
+		return ""
+	}
+
+	cacheKey := fmt.Sprintf(cacheKeyFormat, trackID)
+	_ = host.CacheSetString(cacheKey, url, 86400)
+
+	return url
+}
+
+// ============================================================================
+// TODO: name this section
+// ============================================================================
+
+const uguuEnabledKey = "uguuenabled"
+const caaEnabledKey = "caaenabled"
+
+func getImageURL(username, trackID string) string {
+	cacheKey := fmt.Sprintf(cacheKeyFormat, trackID)
+	cachedURL, exists, err := host.CacheGetString(cacheKey)
+	if err == nil && exists {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for artwork: %s", trackID))
+		return cachedURL
+	}
+
+	caaEnabled, _ := pdk.GetConfig(caaEnabledKey)
+	if caaEnabled == "true" {
+		if url := getImageViaCAA(username, trackID); url != "" {
+			return url
+		}
+	}
+
+	uguuEnabled, _ := pdk.GetConfig(uguuEnabledKey)
+	if uguuEnabled == "true" {
+		return getImageViaUguu(username, trackID)
+	}
+
+	return getImageDirect(trackID)
 }

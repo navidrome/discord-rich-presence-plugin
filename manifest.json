@@ -13,7 +13,8 @@
       "reason": "To communicate with Discord API for gateway discovery and image uploads",
       "requiredHosts": [
         "discord.com",
-        "uguu.se"
+        "uguu.se",
+        "coverartarchive.org"
       ]
     },
     "websocket": {
@@ -64,6 +65,11 @@
           "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
           "default": false
         },
+        "caaenabled": {
+          "type": "boolean",
+          "title": "Use artwork from Cover Art Archive when available",
+          "default": true
+        },
         "users": {
           "type": "array",
           "title": "User Tokens",
@@ -110,6 +116,10 @@
           "options": {
             "format": "radio"
           }
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/caaenabled"
         },
         {
           "type": "Control",
