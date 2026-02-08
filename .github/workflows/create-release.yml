@@ -42,7 +42,8 @@ jobs:
               run: go test -race ./...
 
             - name: Update manifest.json version
-              run: sed -i 's/"version": *"[^"]*"/"version": "${{ inputs.version }}"/' manifest.json
+              run: |
+                  sed -i 's/"version": *"[^"]*"/"version": "${{ inputs.version }}"/' manifest.json
 
             - name: Commit, tag, and push
               run: |
