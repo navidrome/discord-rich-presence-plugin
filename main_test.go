@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
@@ -119,6 +120,7 @@ var _ = Describe("discordPlugin", func() {
 			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
 			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
 
 			// Connect mocks (isConnected check via heartbeat)
 			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
@@ -169,6 +171,65 @@ var _ = Describe("discordPlugin", func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		DescribeTable("activity name configuration",
+			func(configValue string, configExists bool, expectedName string) {
+				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
+				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
+				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", activityNameKey).Return(configValue, configExists)
+
+				// Connect mocks
+				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
+				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
+				gatewayReq := &pdk.HTTPRequest{}
+				pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(gatewayReq).Once()
+				pdk.PDKMock.On("Send", gatewayReq).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp)).Once()
+				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
+					return strings.Contains(url, "gateway.discord.gg")
+				}), mock.Anything, "testuser").Return("testuser", nil)
+
+				// Capture the activity payload sent to Discord
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+				host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
+				host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
+
+				// Image mocks
+				host.CacheMock.On("GetString", mock.MatchedBy(func(key string) bool {
+					return strings.HasPrefix(key, "discord.image.")
+				})).Return("", false, nil)
+				host.CacheMock.On("SetString", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+				assetsReq := &pdk.HTTPRequest{}
+				pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, mock.MatchedBy(func(url string) bool {
+					return strings.Contains(url, "external-assets")
+				})).Return(assetsReq)
+				pdk.PDKMock.On("Send", assetsReq).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{"key":"test-key"}`)))
+				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
+
+				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
+					Username: "testuser",
+					Position: 10,
+					Track: scrobbler.TrackInfo{
+						ID:       "track1",
+						Title:    "Test Song",
+						Artist:   "Test Artist",
+						Album:    "Test Album",
+						Duration: 180,
+					},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
+			},
+			Entry("defaults to Navidrome when not configured", "", false, "Navidrome"),
+			Entry("defaults to Navidrome with explicit default value", "Default", true, "Navidrome"),
+			Entry("uses track title when configured", "Track", true, "Test Song"),
+			Entry("uses track album when configured", "Album", true, "Test Album"),
+			Entry("uses track artist when configured", "Artist", true, "Test Artist"),
+		)
 	})
 
 	Describe("Scrobble", func() {

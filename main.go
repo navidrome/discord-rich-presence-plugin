@@ -25,8 +25,17 @@ import (
 
 // Configuration keys
 const (
-	clientIDKey = "clientid"
-	usersKey    = "users"
+	clientIDKey     = "clientid"
+	usersKey        = "users"
+	activityNameKey = "activityname"
+)
+
+// Activity name display options
+const (
+	activityNameDefault = "Default"
+	activityNameTrack   = "Track"
+	activityNameArtist  = "Artist"
+	activityNameAlbum   = "Album"
 )
 
 // userToken represents a user-token mapping from the config
@@ -136,10 +145,22 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 	startTime := (now - int64(input.Position)) * 1000
 	endTime := startTime + int64(input.Track.Duration)*1000
 
+	// Resolve the activity name based on configuration
+	activityName := "Navidrome"
+	activityNameOption, _ := pdk.GetConfig(activityNameKey)
+	switch activityNameOption {
+	case activityNameTrack:
+		activityName = input.Track.Title
+	case activityNameAlbum:
+		activityName = input.Track.Album
+	case activityNameArtist:
+		activityName = input.Track.Artist
+	}
+
 	// Send activity update
 	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
 		Application: clientID,
-		Name:        "Navidrome",
+		Name:        activityName,
 		Type:        2, // Listening
 		Details:     input.Track.Title,
 		State:       input.Track.Artist,

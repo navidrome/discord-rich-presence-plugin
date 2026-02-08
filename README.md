@@ -14,6 +14,7 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 ## Features
 
 - Shows currently playing track with title, artist, and album art
+- Customizable activity name: "Navidrome" is default, but can be configured to display track title, artist, or album
 - Displays playback progress with start/end timestamps
 - Automatic presence clearing when track finishes
 - Multi-user support with individual Discord tokens
@@ -162,6 +163,16 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
   2. Create a new application or select an existing one
   3. Copy the "Application ID" from the General Information page
 - **Example**: `1234567890123456789`
+
+#### Activity Name Display
+- **What it is**: Choose what information to display as the activity name in Discord Rich Presence
+- **Options**:
+  - **Default**: Shows "Navidrome" (static app name)
+  - **Track**: Shows the currently playing track title
+  - **Album**: Shows the currently playing track's album name
+  - **Artist**: Shows the currently playing track's artist name
+- **Default**: "Default"
+- **Use case**: Choose "Track" or "Artist" for more dynamic, music-focused presence that changes with each song
 
 #### Upload to uguu.se
 - **When to enable**: Your Navidrome instance is NOT publicly accessible from the internet

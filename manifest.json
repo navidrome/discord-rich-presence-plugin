@@ -47,6 +47,13 @@
           "maxLength": 20,
           "pattern": "^[0-9]+$"
         },
+        "activityname": {
+          "type": "string",
+          "title": "Activity Name Display",
+          "description": "Choose what to display as the activity name in Discord Rich Presence",
+          "enum": ["Default", "Track", "Album", "Artist"],
+          "default": "Default"
+        },
         "uguuenabled": {
           "type": "boolean",
           "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
@@ -91,6 +98,13 @@
         {
           "type": "Control",
           "scope": "#/properties/clientid"
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/activityname",
+          "options": {
+            "format": "radio"
+          }
         },
         {
           "type": "Control",
