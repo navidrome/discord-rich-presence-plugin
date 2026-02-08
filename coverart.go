@@ -111,8 +111,8 @@ type subsonicGetSongResponse struct {
 
 type subsonicGetAlbumResponse struct {
 	Data struct {
-		Song struct {
-			MusicBrainzId string `json:"musicBrainzId"`
+		Album struct {
+			MusicBrainzId string `json:"musicBrainzId,omitempty"`
 		} `json:"album"`
 	} `json:"subsonic-response"`
 }
@@ -159,20 +159,24 @@ func getMusicBrainzIDFromAlbumID(username, albumID string) (string, error) {
 		return "", fmt.Errorf("failed to parse getAlbum response: %w", err)
 	}
 
-	return response.Data.Song.MusicBrainzId, nil
+	return response.Data.Album.MusicBrainzId, nil
 }
 
 func fetchImageFromCAA(username, trackID string) (string, error) {
 	albumID, err := getAlbumIDFromTrackID(username, trackID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get album ID from track ID %s: %w", trackID, err)
+		return "", fmt.Errorf("failed to get album ID from track %s: %w", trackID, err)
+	}
+	if albumID == "" {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("No Album ID for track %s", trackID))
+		return "", nil
 	}
 
 	musicBrainzID, err := getMusicBrainzIDFromAlbumID(username, albumID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get MusicBrainz ID from album ID %s: %w", trackID, err)
+		return "", fmt.Errorf("failed to get MusicBrainz ID from album %s: %w", trackID, err)
 	}
-	if musicBrainzID == "" { // TODO: Check for nil as well
+	if musicBrainzID == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("No MusicBrainz ID for album %s", albumID))
 		return "", nil
 	}
@@ -200,7 +204,7 @@ func fetchImageFromCAA(username, trackID string) (string, error) {
 		}
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("No viable cover art for MusicBrainz ID %s (%d images)", musicBrainzID, len(result.Images)))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("No front cover art for MusicBrainz ID %s (%d images)", musicBrainzID, len(result.Images)))
 	return "", nil
 }
 
@@ -218,7 +222,7 @@ func getImageViaCAA(username, trackID string) string {
 }
 
 // ============================================================================
-// TODO: name this section
+// Image URL Resolution
 // ============================================================================
 
 const uguuEnabledKey = "uguuenabled"
