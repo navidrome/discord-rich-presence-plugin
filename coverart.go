@@ -109,12 +109,40 @@ type subsonicGetSongResponse struct {
 	} `json:"subsonic-response"`
 }
 
+func getAlbumIDFromTrackID(username, trackID string) (string, error) {
+	data, err := host.SubsonicAPICall(fmt.Sprintf("getSong?u=%s&id=%s", username, trackID))
+	if err != nil {
+		return "", fmt.Errorf("getSong failed: %w", err)
+	}
+
+	var response subsonicGetSongResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return "", fmt.Errorf("failed to parse getSong response: %w", err)
+	}
+
+	return response.Data.Song.AlbumID, nil
+}
+
 type subsonicGetAlbumResponse struct {
 	Data struct {
 		Album struct {
 			MusicBrainzId string `json:"musicBrainzId,omitempty"`
 		} `json:"album"`
 	} `json:"subsonic-response"`
+}
+
+func getMusicBrainzIDFromAlbumID(username, albumID string) (string, error) {
+	data, err := host.SubsonicAPICall(fmt.Sprintf("getAlbum?u=%s&id=%s", username, albumID))
+	if err != nil {
+		return "", fmt.Errorf("getAlbum failed: %w", err)
+	}
+
+	var response subsonicGetAlbumResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return "", fmt.Errorf("failed to parse getAlbum response: %w", err)
+	}
+
+	return response.Data.Album.MusicBrainzId, nil
 }
 
 // https://musicbrainz.org/doc/Cover_Art_Archive/API
@@ -134,49 +162,19 @@ type caaResponse struct {
 	ReleaseURL string `json:"release"`
 }
 
-func getAlbumIDFromTrackID(username, trackID string) (string, error) {
-	data, err := host.SubsonicAPICall(fmt.Sprintf("getSong?u=%s&id=%s", username, trackID))
-	if err != nil {
-		return "", fmt.Errorf("getSong failed: %w", err)
-	}
-
-	var response subsonicGetSongResponse
-	if err := json.Unmarshal([]byte(data), &response); err != nil {
-		return "", fmt.Errorf("failed to parse getSong response: %w", err)
-	}
-
-	return response.Data.Song.AlbumID, nil
-}
-
-func getMusicBrainzIDFromAlbumID(username, albumID string) (string, error) {
-	data, err := host.SubsonicAPICall(fmt.Sprintf("getAlbum?u=%s&id=%s", username, albumID))
-	if err != nil {
-		return "", fmt.Errorf("getAlbum failed: %w", err)
-	}
-
-	var response subsonicGetAlbumResponse
-	if err := json.Unmarshal([]byte(data), &response); err != nil {
-		return "", fmt.Errorf("failed to parse getAlbum response: %w", err)
-	}
-
-	return response.Data.Album.MusicBrainzId, nil
-}
-
 func fetchImageFromCAA(username, trackID string) (string, error) {
 	albumID, err := getAlbumIDFromTrackID(username, trackID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get album ID from track %s: %w", trackID, err)
-	}
-	if albumID == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("No Album ID for track %s", trackID))
+	} else if albumID == "" {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("No album for track %s", trackID))
 		return "", nil
 	}
 
 	musicBrainzID, err := getMusicBrainzIDFromAlbumID(username, albumID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get MusicBrainz ID from album %s: %w", trackID, err)
-	}
-	if musicBrainzID == "" {
+	} else if musicBrainzID == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("No MusicBrainz ID for album %s", albumID))
 		return "", nil
 	}
@@ -184,12 +182,10 @@ func fetchImageFromCAA(username, trackID string) (string, error) {
 	req := pdk.NewHTTPRequest(pdk.MethodGet, fmt.Sprintf("https://coverartarchive.org/release/%s", musicBrainzID))
 	resp := req.Send()
 
-	status := resp.Status()
-	if status == 404 {
+	if status := resp.Status(); status == 404 {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("No cover art for MusicBrainz ID %s", musicBrainzID))
 		return "", nil
-	}
-	if status >= 400 {
+	} else if status >= 400 {
 		return "", fmt.Errorf("Cover Art Archive request failed: HTTP %d", resp.Status())
 	}
 
