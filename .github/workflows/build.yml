@@ -30,6 +30,12 @@ jobs:
             - name: Run tests
               run: make test
 
+            - name: Append git SHA to version
+              if: github.event_name == 'pull_request'
+              run: |
+                  SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-7)
+                  jq --arg sha "$SHA" '.version = .version + "-" + $sha' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+
             - name: Build and package plugin
               run: make package
 
