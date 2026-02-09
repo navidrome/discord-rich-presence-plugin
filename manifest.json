@@ -68,7 +68,7 @@
         "caaenabled": {
           "type": "boolean",
           "title": "Use artwork from Cover Art Archive when available",
-          "default": true
+          "default": false
         },
         "users": {
           "type": "array",
