@@ -7,6 +7,7 @@ import (
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
+	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 )
 
 // ============================================================================
@@ -105,50 +106,6 @@ func uploadToUguu(imageData []byte, contentType string) (string, error) {
 // Cover Art Archive
 // ============================================================================
 
-type subsonicGetSongResponse struct {
-	Data struct {
-		Song struct {
-			AlbumID string `json:"albumId"`
-		} `json:"song"`
-	} `json:"subsonic-response"`
-}
-
-func getAlbumIDFromTrackID(username, trackID string) (string, error) {
-	data, err := host.SubsonicAPICall(fmt.Sprintf("getSong?u=%s&id=%s", username, trackID))
-	if err != nil {
-		return "", err
-	}
-
-	var response subsonicGetSongResponse
-	if err := json.Unmarshal([]byte(data), &response); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return response.Data.Song.AlbumID, nil
-}
-
-type subsonicGetAlbumResponse struct {
-	Data struct {
-		Album struct {
-			MusicBrainzId string `json:"musicBrainzId,omitempty"`
-		} `json:"album"`
-	} `json:"subsonic-response"`
-}
-
-func getMusicBrainzIDFromAlbumID(username, albumID string) (string, error) {
-	data, err := host.SubsonicAPICall(fmt.Sprintf("getAlbum?u=%s&id=%s", username, albumID))
-	if err != nil {
-		return "", err
-	}
-
-	var response subsonicGetAlbumResponse
-	if err := json.Unmarshal([]byte(data), &response); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return response.Data.Album.MusicBrainzId, nil
-}
-
 // https://musicbrainz.org/doc/Cover_Art_Archive/API
 type caaResponse struct {
 	Images []struct {
@@ -192,25 +149,7 @@ func getImageURLFromMusicBrainzID(musicBrainzID string) (string, error) {
 	return "", nil
 }
 
-func getImageViaCAA(username, trackID string) string {
-	albumID, err := getAlbumIDFromTrackID(username, trackID)
-	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to get album ID from track %s: %s", trackID, err))
-		return ""
-	} else if albumID == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("No album for track %s", trackID))
-		return ""
-	}
-
-	musicBrainzID, err := getMusicBrainzIDFromAlbumID(username, albumID)
-	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to get MusicBrainz ID from album %s: %s", trackID, err))
-		return ""
-	} else if musicBrainzID == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("No MusicBrainz ID for album %s", albumID))
-		return ""
-	}
-
+func getImageViaCAA(username, musicBrainzID string) string {
 	// Check cache first
 	cacheKey := fmt.Sprintf("caa.artwork.%s", musicBrainzID)
 	cachedURL, exists, err := host.CacheGetString(cacheKey)
@@ -235,18 +174,18 @@ func getImageViaCAA(username, trackID string) string {
 const uguuEnabledKey = "uguuenabled"
 const caaEnabledKey = "caaenabled"
 
-func getImageURL(username, trackID string) string {
+func getImageURL(username string, track scrobbler.TrackInfo) string {
 	caaEnabled, _ := pdk.GetConfig(caaEnabledKey)
-	if caaEnabled == "true" {
-		if url := getImageViaCAA(username, trackID); url != "" {
+	if caaEnabled == "true" && track.MBZAlbumID != "" {
+		if url := getImageViaCAA(username, track.MBZAlbumID); url != "" {
 			return url
 		}
 	}
 
 	uguuEnabled, _ := pdk.GetConfig(uguuEnabledKey)
 	if uguuEnabled == "true" {
-		return getImageViaUguu(username, trackID)
+		return getImageViaUguu(username, track.ID)
 	}
 
-	return getImageDirect(trackID)
+	return getImageDirect(track.ID)
 }
