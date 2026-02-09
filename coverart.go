@@ -151,7 +151,7 @@ func getThumbnailForMBZAlbumID(mbzAlbumID string) (string, error) {
 	return "", nil
 }
 
-func getImageViaCAA(username, mbzAlbumID string) string {
+func getImageViaCAA(mbzAlbumID string) string {
 	cacheKey := fmt.Sprintf("caa.artwork.%s", mbzAlbumID)
 	cachedURL, exists, err := host.CacheGetString(cacheKey)
 	if err == nil && exists {
@@ -179,7 +179,7 @@ const caaEnabledKey = "caaenabled"
 func getImageURL(username string, track scrobbler.TrackInfo) string {
 	caaEnabled, _ := pdk.GetConfig(caaEnabledKey)
 	if caaEnabled == "true" && track.MBZAlbumID != "" {
-		if url := getImageViaCAA(username, track.MBZAlbumID); url != "" {
+		if url := getImageViaCAA(track.MBZAlbumID); url != "" {
 			return url
 		}
 	}
