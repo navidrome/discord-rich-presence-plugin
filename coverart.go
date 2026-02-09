@@ -165,6 +165,7 @@ func getImageViaCAA(username, mbzAlbumID string) string {
 		return ""
 	}
 
+	_ = host.CacheSetString(cacheKey, url, 86400)
 	return url
 }
 
