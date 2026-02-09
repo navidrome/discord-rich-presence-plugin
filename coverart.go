@@ -11,16 +11,8 @@ import (
 )
 
 // ============================================================================
-// uguu.se
+// Direct
 // ============================================================================
-
-// uguu.se API response
-type uguuResponse struct {
-	Success bool `json:"success"`
-	Files   []struct {
-		URL string `json:"url"`
-	} `json:"files"`
-}
 
 // getImageDirect returns the artwork URL directly from Navidrome (current behavior).
 func getImageDirect(trackID string) string {
@@ -35,6 +27,18 @@ func getImageDirect(trackID string) string {
 		return ""
 	}
 	return artworkURL
+}
+
+// ============================================================================
+// uguu.se
+// ============================================================================
+
+// uguu.se API response
+type uguuResponse struct {
+	Success bool `json:"success"`
+	Files   []struct {
+		URL string `json:"url"`
+	} `json:"files"`
 }
 
 // getImageViaUguu fetches artwork and uploads it to uguu.se.
@@ -106,6 +110,7 @@ func uploadToUguu(imageData []byte, contentType string) (string, error) {
 // Cover Art Archive
 // ============================================================================
 
+// caaResponse only includes relevant parameters; see API for full response
 // https://musicbrainz.org/doc/Cover_Art_Archive/API
 type caaResponse struct {
 	Images []struct {
@@ -116,19 +121,16 @@ type caaResponse struct {
 			Size250  string `json:"250"`
 			Size500  string `json:"500"`
 			Size1200 string `json:"1200"`
-			Small    string `json:"small"` // deprecated; use 250
-			Large    string `json:"large"` // deprecated; use 500
 		} `json:"thumbnails"`
 	} `json:"images"`
-	ReleaseURL string `json:"release"`
 }
 
-func getImageURLFromMusicBrainzID(musicBrainzID string) (string, error) {
-	req := pdk.NewHTTPRequest(pdk.MethodGet, fmt.Sprintf("https://coverartarchive.org/release/%s", musicBrainzID))
+func getThumbnailForMBZAlbumID(mbzAlbumID string) (string, error) {
+	req := pdk.NewHTTPRequest(pdk.MethodGet, fmt.Sprintf("https://coverartarchive.org/release/%s", mbzAlbumID))
 	resp := req.Send()
 
 	if status := resp.Status(); status == 404 {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("No cover art for MusicBrainz ID %s", musicBrainzID))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("No cover art for MusicBrainz Album ID: %s", mbzAlbumID))
 		return "", nil
 	} else if status >= 400 {
 		return "", fmt.Errorf("HTTP %d", resp.Status())
@@ -145,22 +147,21 @@ func getImageURLFromMusicBrainzID(musicBrainzID string) (string, error) {
 		}
 	}
 
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("No front cover art for MusicBrainz ID %s (%d images)", musicBrainzID, len(result.Images)))
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("No front cover art for MusicBrainz Album ID: %s (%d images)", mbzAlbumID, len(result.Images)))
 	return "", nil
 }
 
-func getImageViaCAA(username, musicBrainzID string) string {
-	// Check cache first
-	cacheKey := fmt.Sprintf("caa.artwork.%s", musicBrainzID)
+func getImageViaCAA(username, mbzAlbumID string) string {
+	cacheKey := fmt.Sprintf("caa.artwork.%s", mbzAlbumID)
 	cachedURL, exists, err := host.CacheGetString(cacheKey)
 	if err == nil && exists {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for Cover Art Archive artwork: %s", musicBrainzID))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for Cover Art Archive artwork: %s", mbzAlbumID))
 		return cachedURL
 	}
 
-	url, err := getImageURLFromMusicBrainzID(musicBrainzID)
+	url, err := getThumbnailForMBZAlbumID(mbzAlbumID)
 	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Cover Art Archive request failed for %s: %s", musicBrainzID, err))
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("Cover Art Archive request failed for %s: %v", mbzAlbumID, err))
 		return ""
 	}
 
