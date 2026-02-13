@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"time"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
@@ -164,6 +165,20 @@ var _ = Describe("getImageURL", func() {
 			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1", MBZAlbumID: "test"})
 			Expect(url).To(Equal("https://example.com/art.jpg"))
 			host.CacheMock.AssertCalled(GinkgoT(), "SetString", "caa.artwork.test", "", int64(86400))
+		})
+
+		It("returns artwork directly after 5 second timeout", func() {
+			host.CacheMock.On("GetString", "caa.artwork.test").Return("", false, nil)
+			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+
+			// Mock coverartarchive.org HTTP get
+			caaReq := &pdk.HTTPRequest{}
+			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://coverartarchive.org/release/test").Return(caaReq)
+			pdk.PDKMock.On("Send", caaReq).WaitUntil(time.After(7 * time.Second)).Return(pdk.NewStubHTTPResponse(200, nil,
+				[]byte(`{"images":[{"front":false,"thumbnails":{"250":"https://coverartarchive.org/release/test/0-250.jpg"}}]}`)))
+
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1", MBZAlbumID: "test"})
+			Expect(url).To(Equal("https://example.com/art.jpg"))
 		})
 	})
 })

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
@@ -110,6 +111,8 @@ func uploadToUguu(imageData []byte, contentType string) (string, error) {
 // Cover Art Archive
 // ============================================================================
 
+const CAA_TIMEOUT = 5 * time.Second
+
 // caaResponse only includes relevant parameters; see API for full response
 // https://musicbrainz.org/doc/Cover_Art_Archive/API
 type caaResponse struct {
@@ -127,18 +130,26 @@ type caaResponse struct {
 
 func getThumbnailForMBZAlbumID(mbzAlbumID string) (string, error) {
 	req := pdk.NewHTTPRequest(pdk.MethodGet, fmt.Sprintf("https://coverartarchive.org/release/%s", mbzAlbumID))
-	resp := req.Send()
 
-	if status := resp.Status(); status == 404 {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("No cover art for MusicBrainz Album ID: %s", mbzAlbumID))
-		return "", nil
-	} else if status >= 400 {
-		return "", fmt.Errorf("HTTP %d", resp.Status())
-	}
+	respChan := make(chan pdk.HTTPResponse, 1)
+	go func() { respChan <- req.Send() }()
 
 	var result caaResponse
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return "", fmt.Errorf("failed to parse: %w", err)
+
+	select {
+	case resp := <-respChan:
+		if status := resp.Status(); status == 404 {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("No cover art for MusicBrainz Album ID: %s", mbzAlbumID))
+			return "", nil
+		} else if status >= 400 {
+			return "", fmt.Errorf("HTTP %d", resp.Status())
+		}
+
+		if err := json.Unmarshal(resp.Body(), &result); err != nil {
+			return "", fmt.Errorf("failed to parse: %w", err)
+		}
+	case <-time.After(CAA_TIMEOUT):
+		return "", fmt.Errorf("Timed out")
 	}
 
 	for _, image := range result.Images {
