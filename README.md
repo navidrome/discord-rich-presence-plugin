@@ -88,6 +88,15 @@ For album artwork to display in Discord, Discord needs to be able to access the 
 
 **How it works**: Album art is automatically uploaded to uguu.se (temporary, anonymous hosting service) so Discord can access it. Files are deleted after 3 hours.
 
+### Backup: Cover Art Archive
+**Use this if**: You have your music tagged with MusicBrainz
+
+**Setup**:
+1. In plugin settings: **Enable** "Use artwork from Cover Art Archive"
+2. No other configuration needed
+
+**How it works**: Cover art is linked directly from MusicBrainz via Release ID using the [Cover Art Archive API](https://musicbrainz.org/doc/Cover_Art_Archive/API). Will fall back to other methods if no artwork is found.
+
 ### Troubleshooting Album Art
 - **No album art showing**: Check Navidrome logs for errors
 - **Using public instance**: Verify ND_BASEURL is correct and Navidrome was restarted
@@ -114,6 +123,10 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
   - **Track**: Shows the currently playing track title
   - **Album**: Shows the currently playing track's album name
   - **Artist**: Shows the currently playing track's artist name
+
+#### Use artwork from Cover Art Archive
+- **When to enable**: Your Navidrome instance is NOT publicly accessible from the internet, or you don't feel comfortable with directly linking
+- **What it does**: Attempts to find and link album artwork with MusicBrainz before using other methods
 
 #### Upload to uguu.se
 - **When to enable**: Your Navidrome instance is NOT publicly accessible from the internet
