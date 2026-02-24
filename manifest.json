@@ -65,11 +65,11 @@
           "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
           "default": false
         },
-        "navlogooverlay": {
+        "spotifylinks": {
           "type": "boolean",
-          "title": "Show Navidrome logo overlay on album art",
-          "description": "Displays the Navidrome logo as a small overlay in the corner of the album artwork in Discord",
-          "default": true
+          "title": "Enable Spotify link-through",
+          "description": "When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page",
+          "default": false
         },
         "users": {
           "type": "array",
@@ -124,7 +124,7 @@
         },
         {
           "type": "Control",
-          "scope": "#/properties/navlogooverlay"
+          "scope": "#/properties/spotifylinks"
         },
         {
           "type": "Control",

@@ -25,10 +25,10 @@ import (
 
 // Configuration keys
 const (
-	clientIDKey       = "clientid"
-	usersKey          = "users"
-	activityNameKey   = "activityname"
-	navLogoOverlayKey = "navlogooverlay"
+	clientIDKey     = "clientid"
+	usersKey        = "users"
+	activityNameKey = "activityname"
+	spotifyLinksKey = "spotifylinks"
 )
 
 // navidromeLogoURL is the small overlay image shown in the bottom-right of the album art.
@@ -162,16 +162,15 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		activityName = input.Track.Artist
 	}
 
-	// Navidrome logo overlay: shown by default; disabled only when explicitly set to "false"
-	navLogoOption, _ := pdk.GetConfig(navLogoOverlayKey)
-	smallImage, smallText := "", ""
-	if navLogoOption != "false" {
-		smallImage = navidromeLogoURL
-		smallText = "Navidrome"
+	// Resolve Spotify URLs if enabled
+	var spotifyURL, artistSearchURL string
+	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
+	if spotifyLinksOption == "true" {
+		spotifyURL = resolveSpotifyURL(input.Track)
+		artistSearchURL = spotifySearch(input.Track.Artist)
 	}
 
 	// Send activity update
-	spotifyURL := resolveSpotifyURL(input.Track)
 	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
 		Application:       clientID,
 		Name:              activityName,
@@ -179,7 +178,7 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		Details:           input.Track.Title,
 		DetailsURL:        spotifyURL,
 		State:             input.Track.Artist,
-		StateURL:          spotifySearch(input.Track.Artist),
+		StateURL:          artistSearchURL,
 		StatusDisplayType: 2,
 		Timestamps: activityTimestamps{
 			Start: startTime,
@@ -189,8 +188,8 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 			LargeImage: getImageURL(input.Username, input.Track.ID),
 			LargeText:  input.Track.Album,
 			LargeURL:   spotifyURL,
-			SmallImage: smallImage,
-			SmallText:  smallText,
+			SmallImage: navidromeLogoURL,
+			SmallText:  "Navidrome",
 		},
 	}); err != nil {
 		return fmt.Errorf("%w: failed to send activity: %v", scrobbler.ScrobblerErrorRetryLater, err)
