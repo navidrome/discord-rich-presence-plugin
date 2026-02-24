@@ -25,6 +25,8 @@ var _ = Describe("discordRPC", func() {
 		host.WebSocketMock.Calls = nil
 		host.SchedulerMock.ExpectedCalls = nil
 		host.SchedulerMock.Calls = nil
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
 	})
 
 	Describe("sendMessage", func() {
@@ -81,9 +83,9 @@ var _ = Describe("discordRPC", func() {
 
 			// Mock HTTP GET request for gateway discovery
 			gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
 
 			// Mock WebSocket connection
 			host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
@@ -265,9 +267,7 @@ var _ = Describe("discordRPC", func() {
 				return val == "mp:external/new-asset"
 			}), int64(imageCacheTTL)).Return(nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`[{"external_asset_path":"external/new-asset"}]`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/new-asset"}]`)}, nil)
 
 			result, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
 			Expect(err).ToNot(HaveOccurred())
@@ -277,9 +277,7 @@ var _ = Describe("discordRPC", func() {
 		It("returns error on HTTP failure", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`error`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil)
 
 			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
 			Expect(err).To(HaveOccurred())
@@ -289,9 +287,7 @@ var _ = Describe("discordRPC", func() {
 		It("returns error on unmarshal failure", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{"not":"an-array"}`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{"not":"an-array"}`)}, nil)
 
 			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
 			Expect(err).To(HaveOccurred())
@@ -301,9 +297,7 @@ var _ = Describe("discordRPC", func() {
 		It("returns error on empty response array", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`[]`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[]`)}, nil)
 
 			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
 			Expect(err).To(HaveOccurred())
@@ -313,9 +307,7 @@ var _ = Describe("discordRPC", func() {
 		It("returns error on empty external_asset_path", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`[{"external_asset_path":""}]`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":""}]`)}, nil)
 
 			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
 			Expect(err).To(HaveOccurred())
@@ -332,9 +324,7 @@ var _ = Describe("discordRPC", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`[{"external_asset_path":"external/art"}]`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/art"}]`)}, nil)
 
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
 				return strings.Contains(msg, `"op":3`) &&
@@ -364,15 +354,9 @@ var _ = Describe("discordRPC", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
 
-			trackReq := &pdk.HTTPRequest{}
-			defaultReq := &pdk.HTTPRequest{}
-
 			// First call (track art) returns 500, second call (default) succeeds
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(trackReq).Once()
-			pdk.PDKMock.On("Send", trackReq).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`error`))).Once()
-
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(defaultReq).Once()
-			pdk.PDKMock.On("Send", defaultReq).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`[{"external_asset_path":"external/logo"}]`))).Once()
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil).Once()
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/logo"}]`)}, nil).Once()
 
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
 				return strings.Contains(msg, `"op":3`) &&
@@ -400,9 +384,7 @@ var _ = Describe("discordRPC", func() {
 		It("clears all images when both track art and default fail", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{"not":"array"}`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{"not":"array"}`)}, nil)
 
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
 				return strings.Contains(msg, `"op":3`) &&
@@ -431,9 +413,7 @@ var _ = Describe("discordRPC", func() {
 			host.CacheMock.On("GetString", discordImageKey).Return("mp:cached/large", true, nil).Once()
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil).Once()
 
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`error`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil)
 
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
 				return strings.Contains(msg, `"large_image":"mp:cached/large"`) &&

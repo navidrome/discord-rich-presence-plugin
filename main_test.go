@@ -33,6 +33,8 @@ var _ = Describe("discordPlugin", func() {
 		host.ArtworkMock.Calls = nil
 		host.SubsonicAPIMock.ExpectedCalls = nil
 		host.SubsonicAPIMock.Calls = nil
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
 	})
 
 	Describe("getConfig", func() {
@@ -128,9 +130,9 @@ var _ = Describe("discordPlugin", func() {
 
 			// Mock HTTP GET request for gateway discovery
 			gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-			gatewayReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(gatewayReq).Once()
-			pdk.PDKMock.On("Send", gatewayReq).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp)).Once()
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
 
 			// Mock WebSocket connection
 			host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
@@ -148,9 +150,7 @@ var _ = Describe("discordPlugin", func() {
 			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
 
 			// Mock HTTP POST requests (Discord external assets API)
-			postReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(postReq)
-			pdk.PDKMock.On("Send", postReq).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{}`)))
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
 
 			// Schedule clear activity callback
 			host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
@@ -180,9 +180,9 @@ var _ = Describe("discordPlugin", func() {
 				// Connect mocks
 				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
 				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-				gatewayReq := &pdk.HTTPRequest{}
-				pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(gatewayReq).Once()
-				pdk.PDKMock.On("Send", gatewayReq).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp)).Once()
+				host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+					return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+				})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
 				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
 					return strings.Contains(url, "gateway.discord.gg")
 				}), mock.Anything, "testuser").Return("testuser", nil)
@@ -199,9 +199,7 @@ var _ = Describe("discordPlugin", func() {
 				host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 				host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
 				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
-				postReq := &pdk.HTTPRequest{}
-				pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, externalAssetsURL).Return(postReq)
-				pdk.PDKMock.On("Send", postReq).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{}`)))
+				host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
 				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
 
 				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{

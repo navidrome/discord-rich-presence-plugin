@@ -49,19 +49,23 @@ func spotifyCacheKey(artist, title, album string) string {
 // trySpotifyFromMBID calls the ListenBrainz spotify-id-from-mbid endpoint.
 func trySpotifyFromMBID(mbid string) string {
 	body := fmt.Sprintf(`[{"recording_mbid":%q}]`, mbid)
-	req := pdk.NewHTTPRequest(pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-mbid/json")
-	req.SetHeader("Content-Type", "application/json")
-	req.SetBody([]byte(body))
-
-	resp := req.Send()
-	status := resp.Status()
-	if status < 200 || status >= 300 {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz MBID lookup failed: HTTP %d, body=%s", status, string(resp.Body())))
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:  "POST",
+		URL:     "https://labs.api.listenbrainz.org/spotify-id-from-mbid/json",
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Body:    []byte(body),
+	})
+	if err != nil {
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("ListenBrainz MBID lookup request failed: %v", err))
 		return ""
 	}
-	id := parseSpotifyID(resp.Body())
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz MBID lookup failed: HTTP %d, body=%s", resp.StatusCode, string(resp.Body)))
+		return ""
+	}
+	id := parseSpotifyID(resp.Body)
 	if id == "" {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz MBID lookup returned no spotify_track_id for mbid=%s, body=%s", mbid, string(resp.Body())))
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz MBID lookup returned no spotify_track_id for mbid=%s, body=%s", mbid, string(resp.Body)))
 	}
 	return id
 }
@@ -69,20 +73,25 @@ func trySpotifyFromMBID(mbid string) string {
 // trySpotifyFromMetadata calls the ListenBrainz spotify-id-from-metadata endpoint.
 func trySpotifyFromMetadata(artist, title, album string) string {
 	payload := fmt.Sprintf(`[{"artist_name":%q,"track_name":%q,"release_name":%q}]`, artist, title, album)
-	req := pdk.NewHTTPRequest(pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json")
-	req.SetHeader("Content-Type", "application/json")
-	req.SetBody([]byte(payload))
 
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz metadata request: %s", payload))
 
-	resp := req.Send()
-	status := resp.Status()
-	if status < 200 || status >= 300 {
-		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz metadata lookup failed: HTTP %d, body=%s", status, string(resp.Body())))
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:  "POST",
+		URL:     "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json",
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Body:    []byte(payload),
+	})
+	if err != nil {
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("ListenBrainz metadata lookup request failed: %v", err))
 		return ""
 	}
-	pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz metadata response: HTTP %d, body=%s", status, string(resp.Body())))
-	id := parseSpotifyID(resp.Body())
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz metadata lookup failed: HTTP %d, body=%s", resp.StatusCode, string(resp.Body)))
+		return ""
+	}
+	pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz metadata response: HTTP %d, body=%s", resp.StatusCode, string(resp.Body)))
+	id := parseSpotifyID(resp.Body)
 	if id == "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("ListenBrainz metadata returned no spotify_track_id for %q - %q", artist, title))
 	}

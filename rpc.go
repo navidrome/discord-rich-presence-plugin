@@ -147,18 +147,22 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, ttl int64) (
 
 	// Process via Discord API
 	body := fmt.Sprintf(`{"urls":[%q]}`, imageURL)
-	req := pdk.NewHTTPRequest(pdk.MethodPost, fmt.Sprintf("https://discord.com/api/v9/applications/%s/external-assets", clientID))
-	req.SetHeader("Authorization", token)
-	req.SetHeader("Content-Type", "application/json")
-	req.SetBody([]byte(body))
-
-	resp := req.Send()
-	if resp.Status() >= 400 {
-		return "", fmt.Errorf("failed to process image: HTTP %d", resp.Status())
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:  "POST",
+		URL:     fmt.Sprintf("https://discord.com/api/v9/applications/%s/external-assets", clientID),
+		Headers: map[string]string{"Authorization": token, "Content-Type": "application/json"},
+		Body:    []byte(body),
+	})
+	if err != nil {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("HTTP request failed for image processing: %v", err))
+		return "", fmt.Errorf("failed to process image: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("failed to process image: HTTP %d", resp.StatusCode)
 	}
 
 	var data []map[string]string
-	if err := json.Unmarshal(resp.Body(), &data); err != nil {
+	if err := json.Unmarshal(resp.Body, &data); err != nil {
 		return "", fmt.Errorf("failed to unmarshal image response: %w", err)
 	}
 
@@ -257,14 +261,20 @@ func (r *discordRPC) sendMessage(username string, opCode int, payload any) error
 
 // getDiscordGateway retrieves the Discord gateway URL.
 func (r *discordRPC) getDiscordGateway() (string, error) {
-	req := pdk.NewHTTPRequest(pdk.MethodGet, "https://discord.com/api/gateway")
-	resp := req.Send()
-	if resp.Status() != 200 {
-		return "", fmt.Errorf("failed to get Discord gateway: HTTP %d", resp.Status())
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method: "GET",
+		URL:    "https://discord.com/api/gateway",
+	})
+	if err != nil {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("HTTP request failed for Discord gateway: %v", err))
+		return "", fmt.Errorf("failed to get Discord gateway: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("failed to get Discord gateway: HTTP %d", resp.StatusCode)
 	}
 
 	var result map[string]string
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return "", fmt.Errorf("failed to parse Discord gateway response: %w", err)
 	}
 	return result["url"], nil

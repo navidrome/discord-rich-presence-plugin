@@ -118,6 +118,8 @@ var _ = Describe("Spotify", func() {
 			pdk.ResetMock()
 			host.CacheMock.ExpectedCalls = nil
 			host.CacheMock.Calls = nil
+			host.HTTPMock.ExpectedCalls = nil
+			host.HTTPMock.Calls = nil
 			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
 		})
 
@@ -138,10 +140,9 @@ var _ = Describe("Spotify", func() {
 			host.CacheMock.On("SetString", spotifyURLKey, mock.Anything, mock.Anything).Return(nil)
 
 			// Mock the MBID HTTP request
-			mbidReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-mbid/json").Return(mbidReq)
-			pdk.PDKMock.On("Send", mbidReq).Return(pdk.NewStubHTTPResponse(200, nil,
-				[]byte(`[{"spotify_track_ids":["63OQupATfueTdZMWIV7nzz"]}]`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://labs.api.listenbrainz.org/spotify-id-from-mbid/json"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"spotify_track_ids":["63OQupATfueTdZMWIV7nzz"]}]`)}, nil)
 
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
 				Title:          "Karma Police",
@@ -159,15 +160,14 @@ var _ = Describe("Spotify", func() {
 			host.CacheMock.On("SetString", spotifyURLKey, mock.Anything, mock.Anything).Return(nil)
 
 			// MBID request fails
-			mbidReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-mbid/json").Return(mbidReq)
-			pdk.PDKMock.On("Send", mbidReq).Return(pdk.NewStubHTTPResponse(404, nil, []byte(`[]`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://labs.api.listenbrainz.org/spotify-id-from-mbid/json"
+			})).Return(&host.HTTPResponse{StatusCode: 404, Body: []byte(`[]`)}, nil)
 
 			// Metadata request succeeds
-			metaReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json").Return(metaReq)
-			pdk.PDKMock.On("Send", metaReq).Return(pdk.NewStubHTTPResponse(200, nil,
-				[]byte(`[{"spotify_track_ids":["4wlLbLeDWbA6TzwZFp1UaK"]}]`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"spotify_track_ids":["4wlLbLeDWbA6TzwZFp1UaK"]}]`)}, nil)
 
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
 				Title:          "Karma Police",
@@ -184,9 +184,9 @@ var _ = Describe("Spotify", func() {
 			host.CacheMock.On("SetString", spotifyURLKey, mock.Anything, mock.Anything).Return(nil)
 
 			// No MBID, metadata request fails
-			metaReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json").Return(metaReq)
-			pdk.PDKMock.On("Send", metaReq).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`error`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json"
+			})).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil)
 
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
 				Title:   "Karma Police",
@@ -203,10 +203,9 @@ var _ = Describe("Spotify", func() {
 			host.CacheMock.On("GetString", spotifyURLKey).Return("", false, nil)
 			host.CacheMock.On("SetString", spotifyURLKey, mock.Anything, mock.Anything).Return(nil)
 
-			metaReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json").Return(metaReq)
-			pdk.PDKMock.On("Send", metaReq).Return(pdk.NewStubHTTPResponse(200, nil,
-				[]byte(`[{"spotify_track_ids":["4tIGK5G9hNDA50ZdGioZRG"]}]`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"spotify_track_ids":["4tIGK5G9hNDA50ZdGioZRG"]}]`)}, nil)
 
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
 				Title:   "Some Song",
