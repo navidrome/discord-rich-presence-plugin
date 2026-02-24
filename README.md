@@ -18,7 +18,7 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 - Shows currently playing track with title, artist, and album art
 - Clickable track title and artist name link to Spotify (direct track link via [ListenBrainz](https://listenbrainz.org), falls back to Spotify search)
 - Clickable album art links to the Spotify track page
-- Navidrome logo overlay on album art (optional, enabled by default)
+- Navidrome logo overlay on album art when track artwork is available
 - Customizable activity name: "Navidrome" is default, but can be configured to display track title, artist, or album
 - Displays playback progress with start/end timestamps
 - Automatic presence clearing when track finishes
@@ -51,6 +51,7 @@ We don't provide instructions for obtaining the token as it may violate Discord'
     - **Activity Name Display**: Choose what to show as the activity name (Default, Track, Album, Artist)
       - "Default" is recommended to help spread awareness of your favorite music server 😉, but feel free to choose the option that best suits your preferences
    - **Upload to uguu.se**: Enable this if your Navidrome isn't publicly accessible (see Album Art section below)
+   - **Enable Spotify link-through**: Enable this to make track title and album art clickable links to Spotify
    - **Users**: Add your Navidrome username and Discord token from Step 3
 
 ### Step 5: Enable Discord Activity Sharing
@@ -123,10 +124,10 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
 - **What it does**: Automatically uploads album artwork to uguu.se (temporary hosting) so Discord can display it
 - **When to disable**: Your Navidrome is publicly accessible and you've set `ND_BASEURL`
 
-#### Show Navidrome Logo Overlay
-- **Default**: Enabled
-- **What it does**: Displays the Navidrome logo as a small overlay in the corner of the album artwork
-- **When to disable**: If you prefer a clean album art display without the logo badge
+#### Enable Spotify Link-through
+- **Default**: Disabled
+- **What it does**: When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page
+- **How it works**: Track URLs are resolved via [ListenBrainz Labs](https://labs.api.listenbrainz.org) for direct Spotify links, falling back to Spotify search when no match is found
 
 #### Users
 Add each Navidrome user who wants Discord Rich Presence. For each user, provide:
@@ -147,14 +148,14 @@ The plugin implements three Navidrome capabilities:
 
 ### Host Services
 
-| Service         | Usage                                                                          |
-|-----------------|--------------------------------------------------------------------------------|
+| Service         | Usage                                                                                                |
+|-----------------|------------------------------------------------------------------------------------------------------|
 | **HTTP**        | Discord API calls (gateway discovery, external assets registration), ListenBrainz Spotify resolution |
-| **WebSocket**   | Persistent connection to Discord gateway                                       |
-| **Cache**       | Sequence numbers, processed image URLs, resolved Spotify URLs                  |
-| **Scheduler**   | Recurring heartbeats, one-time presence clearing                               |
-| **Artwork**     | Track artwork public URL resolution                                             |
-| **SubsonicAPI** | Fetches track artwork data for image hosting upload                             |
+| **WebSocket**   | Persistent connection to Discord gateway                                                             |
+| **Cache**       | Sequence numbers, processed image URLs, resolved Spotify URLs                                        |
+| **Scheduler**   | Recurring heartbeats, one-time presence clearing                                                     |
+| **Artwork**     | Track artwork public URL resolution                                                                  |
+| **SubsonicAPI** | Fetches track artwork data for image hosting upload                                                  |
 
 ### Flow
 
@@ -201,14 +202,14 @@ Resolved URLs are cached (30 days for direct track links, 4 hours for search fal
 
 ### Files
 
-| File                               | Description                                                                    |
-|------------------------------------|--------------------------------------------------------------------------------|
-| [main.go](main.go)                 | Plugin entry point, scrobbler and scheduler implementations, Spotify URL resolution |
-| [rpc.go](rpc.go)                   | Discord gateway communication, WebSocket handling, activity management         |
-| [coverart.go](coverart.go)         | Artwork URL handling and optional uguu.se image hosting                        |
-| [manifest.json](manifest.json)     | Plugin metadata and permission declarations                                    |
-| [navidrome.webp](navidrome.webp)   | Navidrome logo used as the album art overlay badge                             |
-| [Makefile](Makefile)               | Build automation                                                               |
+| File                             | Description                                                                         |
+|----------------------------------|-------------------------------------------------------------------------------------|
+| [main.go](main.go)               | Plugin entry point, scrobbler and scheduler implementations, Spotify URL resolution |
+| [rpc.go](rpc.go)                 | Discord gateway communication, WebSocket handling, activity management              |
+| [coverart.go](coverart.go)       | Artwork URL handling and optional uguu.se image hosting                             |
+| [manifest.json](manifest.json)   | Plugin metadata and permission declarations                                         |
+| [navidrome.webp](navidrome.webp) | Navidrome logo used as the album art overlay badge                                  |
+| [Makefile](Makefile)             | Build automation                                                                    |
 
 ## Building
 
