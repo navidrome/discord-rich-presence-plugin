@@ -1,3 +1,4 @@
 *.wasm
 *.ndp
 tmp
+discord-rich-presence
