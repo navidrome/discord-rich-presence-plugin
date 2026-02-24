@@ -1,12 +1,9 @@
 package main
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
@@ -14,10 +11,16 @@ import (
 	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 )
 
-// hashKey returns a hex-encoded MD5 hash of s, for use as a cache key suffix.
+// hashKey returns a hex-encoded FNV-1a hash of s, for use as a cache key suffix.
 func hashKey(s string) string {
-	h := md5.Sum([]byte(s))
-	return hex.EncodeToString(h[:])
+	const offset64 uint64 = 14695981039346656037
+	const prime64 uint64 = 1099511628211
+	h := offset64
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= prime64
+	}
+	return fmt.Sprintf("%016x", h)
 }
 
 const (
@@ -115,11 +118,18 @@ func parseSpotifyID(body []byte) string {
 	return ""
 }
 
-// isValidSpotifyID checks that a Spotify track ID contains only base-62 characters.
-var spotifyIDRegex = regexp.MustCompile(`^[0-9A-Za-z]+$`)
-
+// isValidSpotifyID checks that a Spotify track ID is non-empty and contains only base-62 characters.
 func isValidSpotifyID(id string) bool {
-	return spotifyIDRegex.MatchString(id)
+	if len(id) == 0 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveSpotifyURL resolves a direct Spotify track URL via ListenBrainz Labs,
