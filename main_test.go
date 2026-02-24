@@ -170,7 +170,7 @@ var _ = Describe("discordPlugin", func() {
 		})
 
 		DescribeTable("activity name configuration",
-			func(configValue string, configExists bool, expectedName string) {
+			func(configValue string, configExists bool, expectedName string, expectedDisplayType int) {
 				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
 				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
@@ -217,12 +217,13 @@ var _ = Describe("discordPlugin", func() {
 				})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
+				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"status_display_type":%d`, expectedDisplayType)))
 			},
-			Entry("defaults to Navidrome when not configured", "", false, "Navidrome"),
-			Entry("defaults to Navidrome with explicit default value", "Default", true, "Navidrome"),
-			Entry("uses track title when configured", "Track", true, "Test Song"),
-			Entry("uses track album when configured", "Album", true, "Test Album"),
-			Entry("uses track artist when configured", "Artist", true, "Test Artist"),
+			Entry("defaults to Navidrome when not configured", "", false, "Navidrome", 2),
+			Entry("defaults to Navidrome with explicit default value", "Default", true, "Navidrome", 2),
+			Entry("uses track title when configured", "Track", true, "Test Song", 0),
+			Entry("uses track album when configured", "Album", true, "Test Album", 0),
+			Entry("uses track artist when configured", "Artist", true, "Test Artist", 0),
 		)
 	})
 
