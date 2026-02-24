@@ -116,8 +116,8 @@ func isValidSpotifyID(id string) bool {
 // resolveSpotifyURL resolves a direct Spotify track URL via ListenBrainz Labs,
 // falling back to a search URL. Results are cached.
 func resolveSpotifyURL(track scrobbler.TrackInfo) string {
-	primary, _ := parsePrimaryArtist(track.Artist)
-	if primary == "" && len(track.Artists) > 0 {
+	var primary string
+	if len(track.Artists) > 0 {
 		primary = track.Artists[0].Name
 	}
 
@@ -158,29 +158,4 @@ func resolveSpotifyURL(track scrobbler.TrackInfo) string {
 	_ = host.CacheSetString(cacheKey, searchURL, spotifyCacheTTLMiss)
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Spotify resolution missed, falling back to search URL for %q - %q: %s", primary, track.Title, searchURL))
 	return searchURL
-}
-
-// parsePrimaryArtist returns the primary artist (before "Feat." / "Ft." / "Featuring")
-// and the optional feat suffix. For artist resolution, only the primary artist is used;
-// co-artists identified by "Feat.", "Ft.", "Featuring", "&", or "/" are stripped.
-func parsePrimaryArtist(artist string) (primary, featSuffix string) {
-	artist = strings.TrimSpace(artist)
-	if artist == "" {
-		return "", ""
-	}
-	lower := strings.ToLower(artist)
-	for _, sep := range []string{" feat. ", " ft. ", " featuring "} {
-		if i := strings.Index(lower, sep); i >= 0 {
-			primary = strings.TrimSpace(artist[:i])
-			featSuffix = strings.TrimSpace(artist[i:])
-			return primary, featSuffix
-		}
-	}
-	// Split on co-artist separators; take only the first artist.
-	for _, sep := range []string{" & ", " / "} {
-		if i := strings.Index(artist, sep); i >= 0 {
-			return strings.TrimSpace(artist[:i]), ""
-		}
-	}
-	return artist, ""
 }

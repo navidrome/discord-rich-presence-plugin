@@ -14,23 +14,6 @@ import (
 )
 
 var _ = Describe("Spotify", func() {
-	Describe("parsePrimaryArtist", func() {
-		DescribeTable("extracts primary artist and feat suffix",
-			func(input, expectedPrimary, expectedFeat string) {
-				primary, feat := parsePrimaryArtist(input)
-				Expect(primary).To(Equal(expectedPrimary))
-				Expect(feat).To(Equal(expectedFeat))
-			},
-			Entry("simple artist", "Radiohead", "Radiohead", ""),
-			Entry("Feat. separator", "Wretch 32 Feat. Badness & Ghetts", "Wretch 32", "Feat. Badness & Ghetts"),
-			Entry("Ft. separator", "Artist Ft. Guest", "Artist", "Ft. Guest"),
-			Entry("Featuring separator", "Artist Featuring Someone", "Artist", "Featuring Someone"),
-			Entry("& co-artist", "PinkPantheress & Ice Spice", "PinkPantheress", ""),
-			Entry("/ co-artist", "Artist A / Artist B", "Artist A", ""),
-			Entry("empty string", "", "", ""),
-		)
-	})
-
 	Describe("spotifySearchURL", func() {
 		DescribeTable("constructs Spotify search URL",
 			func(expectedURL string, terms ...string) {
@@ -142,9 +125,10 @@ var _ = Describe("Spotify", func() {
 			host.CacheMock.On("GetString", spotifyURLKey).Return("https://open.spotify.com/track/cached123", true, nil)
 
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
-				Title:  "Karma Police",
-				Artist: "Radiohead",
-				Album:  "OK Computer",
+				Title:   "Karma Police",
+				Artist:  "Radiohead",
+				Artists: []scrobbler.ArtistRef{{Name: "Radiohead"}},
+				Album:   "OK Computer",
 			})
 			Expect(url).To(Equal("https://open.spotify.com/track/cached123"))
 		})
@@ -162,6 +146,7 @@ var _ = Describe("Spotify", func() {
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
 				Title:          "Karma Police",
 				Artist:         "Radiohead",
+				Artists:        []scrobbler.ArtistRef{{Name: "Radiohead"}},
 				Album:          "OK Computer",
 				MBZRecordingID: "mbid-123",
 			})
@@ -187,6 +172,7 @@ var _ = Describe("Spotify", func() {
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
 				Title:          "Karma Police",
 				Artist:         "Radiohead",
+				Artists:        []scrobbler.ArtistRef{{Name: "Radiohead"}},
 				Album:          "OK Computer",
 				MBZRecordingID: "mbid-123",
 			})
@@ -203,16 +189,17 @@ var _ = Describe("Spotify", func() {
 			pdk.PDKMock.On("Send", metaReq).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`error`)))
 
 			url := resolveSpotifyURL(scrobbler.TrackInfo{
-				Title:  "Karma Police",
-				Artist: "Radiohead",
-				Album:  "OK Computer",
+				Title:   "Karma Police",
+				Artist:  "Radiohead",
+				Artists: []scrobbler.ArtistRef{{Name: "Radiohead"}},
+				Album:   "OK Computer",
 			})
 			Expect(url).To(HavePrefix("https://open.spotify.com/search/"))
 			Expect(url).To(ContainSubstring("Radiohead"))
 			host.CacheMock.AssertCalled(GinkgoT(), "SetString", spotifyURLKey, mock.Anything, spotifyCacheTTLMiss)
 		})
 
-		It("uses Artists fallback when primary artist parse is empty", func() {
+		It("uses Artists[0] for primary artist", func() {
 			host.CacheMock.On("GetString", spotifyURLKey).Return("", false, nil)
 			host.CacheMock.On("SetString", spotifyURLKey, mock.Anything, mock.Anything).Return(nil)
 
