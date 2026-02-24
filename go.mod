@@ -3,7 +3,7 @@ module discord-rich-presence
 go 1.25
 
 require (
-	github.com/navidrome/navidrome/plugins/pdk/go v0.0.0-20260224182233-40719d928320
+	github.com/navidrome/navidrome/plugins/pdk/go v0.0.0-20260224192836-652c27690be6
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
 	github.com/stretchr/testify v1.11.1
