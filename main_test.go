@@ -33,6 +33,8 @@ var _ = Describe("discordPlugin", func() {
 		host.ArtworkMock.Calls = nil
 		host.SubsonicAPIMock.ExpectedCalls = nil
 		host.SubsonicAPIMock.Calls = nil
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
 	})
 
 	Describe("getConfig", func() {
@@ -121,15 +123,16 @@ var _ = Describe("discordPlugin", func() {
 			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
 			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
 
 			// Connect mocks (isConnected check via heartbeat)
 			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
 
 			// Mock HTTP GET request for gateway discovery
 			gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-			gatewayReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(gatewayReq).Once()
-			pdk.PDKMock.On("Send", gatewayReq).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp)).Once()
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
 
 			// Mock WebSocket connection
 			host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
@@ -141,19 +144,13 @@ var _ = Describe("discordPlugin", func() {
 			// Cancel existing clear schedule (may or may not exist)
 			host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
 
-			// Image mocks - cache miss, will make HTTP request to Discord
-			host.CacheMock.On("GetString", mock.MatchedBy(func(key string) bool {
-				return strings.HasPrefix(key, "discord.image.")
-			})).Return("", false, nil)
-			host.CacheMock.On("SetString", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			// Cache mocks (Discord image processing)
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
 			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
 
-			// Mock HTTP request for Discord external assets API
-			assetsReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, mock.MatchedBy(func(url string) bool {
-				return strings.Contains(url, "external-assets")
-			})).Return(assetsReq)
-			pdk.PDKMock.On("Send", assetsReq).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{"key":"test-key"}`)))
+			// Mock HTTP POST requests (Discord external assets API)
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
 
 			// Schedule clear activity callback
 			host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
@@ -173,18 +170,19 @@ var _ = Describe("discordPlugin", func() {
 		})
 
 		DescribeTable("activity name configuration",
-			func(configValue string, configExists bool, expectedName string) {
+			func(configValue string, configExists bool, expectedName string, expectedDisplayType int) {
 				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
 				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return(configValue, configExists)
+				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
 
 				// Connect mocks
 				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
 				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-				gatewayReq := &pdk.HTTPRequest{}
-				pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(gatewayReq).Once()
-				pdk.PDKMock.On("Send", gatewayReq).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp)).Once()
+				host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+					return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+				})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
 				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
 					return strings.Contains(url, "gateway.discord.gg")
 				}), mock.Anything, "testuser").Return("testuser", nil)
@@ -197,17 +195,11 @@ var _ = Describe("discordPlugin", func() {
 				host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
 				host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
 
-				// Image mocks
-				host.CacheMock.On("GetString", mock.MatchedBy(func(key string) bool {
-					return strings.HasPrefix(key, "discord.image.")
-				})).Return("", false, nil)
-				host.CacheMock.On("SetString", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+				// Cache mocks (Discord image processing)
+				host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+				host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
 				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
-				assetsReq := &pdk.HTTPRequest{}
-				pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, mock.MatchedBy(func(url string) bool {
-					return strings.Contains(url, "external-assets")
-				})).Return(assetsReq)
-				pdk.PDKMock.On("Send", assetsReq).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{"key":"test-key"}`)))
+				host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
 				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
 
 				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
@@ -223,12 +215,13 @@ var _ = Describe("discordPlugin", func() {
 				})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
+				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"status_display_type":%d`, expectedDisplayType)))
 			},
-			Entry("defaults to Navidrome when not configured", "", false, "Navidrome"),
-			Entry("defaults to Navidrome with explicit default value", "Default", true, "Navidrome"),
-			Entry("uses track title when configured", "Track", true, "Test Song"),
-			Entry("uses track album when configured", "Album", true, "Test Album"),
-			Entry("uses track artist when configured", "Artist", true, "Test Artist"),
+			Entry("defaults to Navidrome when not configured", "", false, "Navidrome", 2),
+			Entry("defaults to Navidrome with explicit default value", "Default", true, "Navidrome", 2),
+			Entry("uses track title when configured", "Track", true, "Test Song", 0),
+			Entry("uses track album when configured", "Album", true, "Test Album", 0),
+			Entry("uses track artist when configured", "Artist", true, "Test Artist", 0),
 		)
 	})
 

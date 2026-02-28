@@ -28,6 +28,15 @@ const (
 	clientIDKey     = "clientid"
 	usersKey        = "users"
 	activityNameKey = "activityname"
+	spotifyLinksKey = "spotifylinks"
+)
+
+const (
+	navidromeWebsiteURL = "https://www.navidrome.org"
+
+	// navidromeLogoURL is the small overlay image shown in the bottom-right of the album art.
+	// The file is stored in the plugins' GitHub repository so Discord can fetch it as an external asset.
+	navidromeLogoURL = "https://raw.githubusercontent.com/navidrome/website/refs/heads/master/assets/icons/logo.webp"
 )
 
 // Activity name display options
@@ -147,23 +156,38 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 
 	// Resolve the activity name based on configuration
 	activityName := "Navidrome"
+	statusDisplayType := statusDisplayDetails
 	activityNameOption, _ := pdk.GetConfig(activityNameKey)
 	switch activityNameOption {
 	case activityNameTrack:
 		activityName = input.Track.Title
+		statusDisplayType = statusDisplayName
 	case activityNameAlbum:
 		activityName = input.Track.Album
+		statusDisplayType = statusDisplayName
 	case activityNameArtist:
 		activityName = input.Track.Artist
+		statusDisplayType = statusDisplayName
+	}
+
+	// Resolve Spotify URLs if enabled
+	var spotifyURL, artistSearchURL string
+	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
+	if spotifyLinksOption == "true" {
+		spotifyURL = resolveSpotifyURL(input.Track)
+		artistSearchURL = spotifySearchURL(input.Track.Artist)
 	}
 
 	// Send activity update
 	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
-		Application: clientID,
-		Name:        activityName,
-		Type:        2, // Listening
-		Details:     input.Track.Title,
-		State:       input.Track.Artist,
+		Application:       clientID,
+		Name:              activityName,
+		Type:              2, // Listening
+		Details:           input.Track.Title,
+		DetailsURL:        spotifyURL,
+		State:             input.Track.Artist,
+		StateURL:          artistSearchURL,
+		StatusDisplayType: statusDisplayType,
 		Timestamps: activityTimestamps{
 			Start: startTime,
 			End:   endTime,
@@ -171,6 +195,10 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		Assets: activityAssets{
 			LargeImage: getImageURL(input.Username, input.Track.ID),
 			LargeText:  input.Track.Album,
+			LargeURL:   spotifyURL,
+			SmallImage: navidromeLogoURL,
+			SmallText:  "Navidrome",
+			SmallURL:   navidromeWebsiteURL,
 		},
 	}); err != nil {
 		return fmt.Errorf("%w: failed to send activity: %v", scrobbler.ScrobblerErrorRetryLater, err)
