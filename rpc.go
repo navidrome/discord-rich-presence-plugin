@@ -224,6 +224,18 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, ttl int64) (
 func (r *discordRPC) sendActivity(clientID, username, token string, data activity) error {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Sending activity for user %s: %s - %s", username, data.Details, data.State))
 
+	// Truncate text fields to Discord's 128-character limit
+	data.Name = truncateText(data.Name)
+	data.Details = truncateText(data.Details)
+	data.State = truncateText(data.State)
+	data.Assets.LargeText = truncateText(data.Assets.LargeText)
+
+	// Omit URLs that exceed Discord's 256-character limit
+	data.DetailsURL = truncateURL(data.DetailsURL)
+	data.StateURL = truncateURL(data.StateURL)
+	data.Assets.LargeURL = truncateURL(data.Assets.LargeURL)
+	data.Assets.SmallURL = truncateURL(data.Assets.SmallURL)
+
 	// Try track artwork first, fall back to Navidrome logo
 	usingDefaultImage := false
 	processedImage, err := r.processImage(data.Assets.LargeImage, clientID, token, imageCacheTTL)

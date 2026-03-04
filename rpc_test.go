@@ -435,6 +435,49 @@ var _ = Describe("discordRPC", func() {
 			})
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		It("truncates long text fields and omits long URLs", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("mp:cached/art", true, nil).Once()
+			host.CacheMock.On("GetString", discordImageKey).Return("mp:cached/logo", true, nil).Once()
+
+			longName := strings.Repeat("N", 200)
+			longTitle := strings.Repeat("T", 200)
+			longArtist := strings.Repeat("A", 200)
+			longAlbum := strings.Repeat("B", 200)
+			longURL := "https://example.com/" + strings.Repeat("x", 237)
+
+			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
+				// Text fields should be truncated to 128 runes (127 + "…")
+				truncatedName := strings.Repeat("N", 127) + "…"
+				truncatedTitle := strings.Repeat("T", 127) + "…"
+				truncatedArtist := strings.Repeat("A", 127) + "…"
+				truncatedAlbum := strings.Repeat("B", 127) + "…"
+				return strings.Contains(msg, truncatedName) &&
+					strings.Contains(msg, truncatedTitle) &&
+					strings.Contains(msg, truncatedArtist) &&
+					strings.Contains(msg, truncatedAlbum) &&
+					!strings.Contains(msg, longURL) // URL should be omitted
+			})).Return(nil)
+
+			err := r.sendActivity("client123", "testuser", "token123", activity{
+				Application: "client123",
+				Name:        longName,
+				Type:        2,
+				Details:     longTitle,
+				DetailsURL:  longURL,
+				State:       longArtist,
+				StateURL:    longURL,
+				Assets: activityAssets{
+					LargeImage: "https://example.com/art.jpg",
+					LargeText:  longAlbum,
+					LargeURL:   longURL,
+					SmallImage: navidromeLogoURL,
+					SmallText:  "Navidrome",
+					SmallURL:   longURL,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
 	Describe("clearActivity", func() {
