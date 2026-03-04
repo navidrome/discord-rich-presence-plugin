@@ -25,7 +25,7 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 - Multi-user support with individual Discord tokens
 - Optional image hosting via [uguu.se](https://uguu.se) for non-public Navidrome instances
 
-<img height="550" alt="Discord Rich Presence showing currently playing track with album art, artist, and playback progress" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/screenshot.png">
+<img alt="Discord Rich Presence showing currently playing track with album art, artist, and playback progress" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/screenshot.png">
 
 
 ## Installation
