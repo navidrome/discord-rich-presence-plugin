@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -446,17 +447,34 @@ var _ = Describe("discordRPC", func() {
 			longAlbum := strings.Repeat("B", 200)
 			longURL := "https://example.com/" + strings.Repeat("x", 237)
 
+			truncatedName := strings.Repeat("N", 127) + "…"
+			truncatedTitle := strings.Repeat("T", 127) + "…"
+			truncatedArtist := strings.Repeat("A", 127) + "…"
+			truncatedAlbum := strings.Repeat("B", 127) + "…"
+
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
-				// Text fields should be truncated to 128 runes (127 + "…")
-				truncatedName := strings.Repeat("N", 127) + "…"
-				truncatedTitle := strings.Repeat("T", 127) + "…"
-				truncatedArtist := strings.Repeat("A", 127) + "…"
-				truncatedAlbum := strings.Repeat("B", 127) + "…"
-				return strings.Contains(msg, truncatedName) &&
-					strings.Contains(msg, truncatedTitle) &&
-					strings.Contains(msg, truncatedArtist) &&
-					strings.Contains(msg, truncatedAlbum) &&
-					!strings.Contains(msg, longURL) // URL should be omitted
+				var message struct {
+					D json.RawMessage `json:"d"`
+				}
+				if err := json.Unmarshal([]byte(msg), &message); err != nil {
+					return false
+				}
+				var presence presencePayload
+				if err := json.Unmarshal(message.D, &presence); err != nil {
+					return false
+				}
+				if len(presence.Activities) != 1 {
+					return false
+				}
+				act := presence.Activities[0]
+				return act.Name == truncatedName &&
+					act.Details == truncatedTitle &&
+					act.State == truncatedArtist &&
+					act.Assets.LargeText == truncatedAlbum &&
+					act.DetailsURL == "" &&
+					act.StateURL == "" &&
+					act.Assets.LargeURL == "" &&
+					act.Assets.SmallURL == ""
 			})).Return(nil)
 
 			err := r.sendActivity("client123", "testuser", "token123", activity{
