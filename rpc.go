@@ -55,6 +55,30 @@ const (
 
 const heartbeatInterval = 41 // Heartbeat interval in seconds
 
+// Discord API field length limits
+const (
+	maxTextLength = 128 // Max characters for text fields (details, state, name, large_text)
+	maxURLLength  = 256 // Max characters for URL fields (details_url, state_url, etc.)
+)
+
+// truncateText truncates s to maxTextLength runes, appending "…" if truncated.
+func truncateText(s string) string {
+	runes := []rune(s)
+	if len(runes) <= maxTextLength {
+		return s
+	}
+	return string(runes[:maxTextLength-1]) + "…"
+}
+
+// truncateURL returns s unchanged if within maxURLLength, otherwise returns ""
+// (a truncated URL would be broken, so we omit it entirely).
+func truncateURL(s string) string {
+	if len(s) <= maxURLLength {
+		return s
+	}
+	return ""
+}
+
 // activity represents a Discord activity sent via Gateway opcode 3.
 type activity struct {
 	Name              string             `json:"name"`

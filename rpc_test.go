@@ -448,4 +448,55 @@ var _ = Describe("discordRPC", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
+
+	Describe("truncateText", func() {
+		It("returns short strings unchanged", func() {
+			Expect(truncateText("hello")).To(Equal("hello"))
+		})
+
+		It("returns exactly 128-char strings unchanged", func() {
+			s := strings.Repeat("a", 128)
+			Expect(truncateText(s)).To(Equal(s))
+		})
+
+		It("truncates strings over 128 chars to 127 + ellipsis", func() {
+			s := strings.Repeat("a", 200)
+			result := truncateText(s)
+			Expect([]rune(result)).To(HaveLen(128))
+			Expect(result).To(HaveSuffix("…"))
+		})
+
+		It("handles multi-byte characters correctly", func() {
+			// 130 Japanese characters — each is one rune but 3 bytes
+			s := strings.Repeat("あ", 130)
+			result := truncateText(s)
+			runes := []rune(result)
+			Expect(runes).To(HaveLen(128))
+			Expect(string(runes[127])).To(Equal("…"))
+		})
+
+		It("returns empty string unchanged", func() {
+			Expect(truncateText("")).To(Equal(""))
+		})
+	})
+
+	Describe("truncateURL", func() {
+		It("returns short URLs unchanged", func() {
+			Expect(truncateURL("https://example.com")).To(Equal("https://example.com"))
+		})
+
+		It("returns exactly 256-char URLs unchanged", func() {
+			u := "https://example.com/" + strings.Repeat("a", 236)
+			Expect(truncateURL(u)).To(Equal(u))
+		})
+
+		It("returns empty string for URLs over 256 chars", func() {
+			u := "https://example.com/" + strings.Repeat("a", 237)
+			Expect(truncateURL(u)).To(Equal(""))
+		})
+
+		It("returns empty string unchanged", func() {
+			Expect(truncateURL("")).To(Equal(""))
+		})
+	})
 })
