@@ -23,7 +23,7 @@ clean:
 	rm -f $(WASM_FILE) $(PLUGIN_NAME).ndp
 
 release:
-	@if [[ ! "${V}" =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$$ ]]; then echo "Usage: make release V=X.X.X"; exit 1; fi
-	gh workflow run create-release.yml -f version=${V}
-	@echo "Release v${V} workflow triggered. Check progress: gh run list --workflow=create-release.yml"
+	@if [[ ! "${V}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]]; then echo "Usage: make release V=X.X.X [PRE=true]"; exit 1; fi
+	gh workflow run create-release.yml -f version=${V} -f prerelease=$(if $(filter true,$(PRE)),true,false)
+	@echo "Release v${V}$(if $(filter true,$(PRE)),-prerelease,) workflow triggered. Check progress: gh run list --workflow=create-release.yml"
 .PHONY: release
