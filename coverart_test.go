@@ -20,6 +20,8 @@ var _ = Describe("getImageURL", func() {
 		host.ArtworkMock.Calls = nil
 		host.SubsonicAPIMock.ExpectedCalls = nil
 		host.SubsonicAPIMock.Calls = nil
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
 		pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
 	})
 
@@ -71,10 +73,9 @@ var _ = Describe("getImageURL", func() {
 				Return("image/jpeg", imageData, nil)
 
 			// Mock uguu.se HTTP upload
-			uguuReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://uguu.se/upload").Return(uguuReq)
-			pdk.PDKMock.On("Send", uguuReq).Return(pdk.NewStubHTTPResponse(200, nil,
-				[]byte(`{"success":true,"files":[{"url":"https://a.uguu.se/uploaded.jpg"}]}`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://uguu.se/upload"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{"success":true,"files":[{"url":"https://a.uguu.se/uploaded.jpg"}]}`)}, nil)
 
 			// Mock cache set
 			host.CacheMock.On("SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", int64(9000)).Return(nil)
@@ -98,9 +99,9 @@ var _ = Describe("getImageURL", func() {
 			host.SubsonicAPIMock.On("CallRaw", "/getCoverArt?u=testuser&id=track1&size=300").
 				Return("image/jpeg", []byte("fake-image-data"), nil)
 
-			uguuReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, "https://uguu.se/upload").Return(uguuReq)
-			pdk.PDKMock.On("Send", uguuReq).Return(pdk.NewStubHTTPResponse(500, nil, []byte(`{"success":false}`)))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://uguu.se/upload"
+			})).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`{"success":false}`)}, nil)
 
 			url := getImageURL("testuser", "track1")
 			Expect(url).To(BeEmpty())

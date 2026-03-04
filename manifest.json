@@ -10,10 +10,11 @@
       "reason": "To process scrobbles on behalf of users"
     },
     "http": {
-      "reason": "To communicate with Discord API for gateway discovery and image uploads",
+      "reason": "To communicate with Discord API, image uploads, and ListenBrainz for track resolution",
       "requiredHosts": [
         "discord.com",
-        "uguu.se"
+        "uguu.se",
+        "labs.api.listenbrainz.org"
       ]
     },
     "websocket": {
@@ -62,6 +63,12 @@
         "uguuenabled": {
           "type": "boolean",
           "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
+          "default": false
+        },
+        "spotifylinks": {
+          "type": "boolean",
+          "title": "Enable Spotify link-through",
+          "description": "When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page",
           "default": false
         },
         "users": {
@@ -114,6 +121,10 @@
         {
           "type": "Control",
           "scope": "#/properties/uguuenabled"
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/spotifylinks"
         },
         {
           "type": "Control",

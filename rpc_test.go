@@ -25,6 +25,8 @@ var _ = Describe("discordRPC", func() {
 		host.WebSocketMock.Calls = nil
 		host.SchedulerMock.ExpectedCalls = nil
 		host.SchedulerMock.Calls = nil
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
 	})
 
 	Describe("sendMessage", func() {
@@ -81,9 +83,9 @@ var _ = Describe("discordRPC", func() {
 
 			// Mock HTTP GET request for gateway discovery
 			gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodGet, "https://discord.com/api/gateway").Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, gatewayResp))
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
 
 			// Mock WebSocket connection
 			host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
@@ -232,26 +234,103 @@ var _ = Describe("discordRPC", func() {
 		})
 	})
 
+	Describe("processImage", func() {
+		BeforeEach(func() {
+			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
+		})
+
+		It("returns error for empty URL", func() {
+			_, err := r.processImage("", "client123", "token123", imageCacheTTL)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("image URL is empty"))
+		})
+
+		It("returns mp: prefixed URL as-is", func() {
+			result, err := r.processImage("mp:external/abc123", "client123", "token123", imageCacheTTL)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result).To(Equal("mp:external/abc123"))
+		})
+
+		It("returns cached value on cache hit", func() {
+			host.CacheMock.On("GetString", mock.MatchedBy(func(key string) bool {
+				return strings.HasPrefix(key, "discord.image.")
+			})).Return("mp:cached/image", true, nil)
+
+			result, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result).To(Equal("mp:cached/image"))
+		})
+
+		It("processes image via Discord API and caches result", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+			host.CacheMock.On("SetString", discordImageKey, mock.MatchedBy(func(val string) bool {
+				return val == "mp:external/new-asset"
+			}), int64(imageCacheTTL)).Return(nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/new-asset"}]`)}, nil)
+
+			result, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result).To(Equal("mp:external/new-asset"))
+		})
+
+		It("returns error on HTTP failure", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil)
+
+			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("HTTP 500"))
+		})
+
+		It("returns error on unmarshal failure", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{"not":"an-array"}`)}, nil)
+
+			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to unmarshal"))
+		})
+
+		It("returns error on empty response array", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[]`)}, nil)
+
+			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no data returned"))
+		})
+
+		It("returns error on empty external_asset_path", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":""}]`)}, nil)
+
+			_, err := r.processImage("https://example.com/art.jpg", "client123", "token123", imageCacheTTL)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("empty external_asset_path"))
+		})
+	})
+
 	Describe("sendActivity", func() {
 		BeforeEach(func() {
 			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
-			host.CacheMock.On("GetString", mock.MatchedBy(func(key string) bool {
-				return strings.HasPrefix(key, "discord.image.")
-			})).Return("", false, nil)
-			host.CacheMock.On("SetString", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-
-			// Mock HTTP request for Discord external assets API (image processing)
-			// When processImage is called, it makes an HTTP request
-			httpReq := &pdk.HTTPRequest{}
-			pdk.PDKMock.On("NewHTTPRequest", pdk.MethodPost, mock.Anything).Return(httpReq)
-			pdk.PDKMock.On("Send", mock.Anything).Return(pdk.NewStubHTTPResponse(200, nil, []byte(`{"key":"test-key"}`)))
 		})
 
-		It("sends activity update to Discord", func() {
+		It("sends activity with track artwork and SmallImage overlay", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/art"}]`)}, nil)
+
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
 				return strings.Contains(msg, `"op":3`) &&
-					strings.Contains(msg, `"name":"Test Song"`) &&
-					strings.Contains(msg, `"state":"Test Artist"`)
+					strings.Contains(msg, `"large_image":"mp:external/art"`) &&
+					strings.Contains(msg, `"small_image":"mp:external/art"`) &&
+					strings.Contains(msg, `"small_text":"Navidrome"`)
 			})).Return(nil)
 
 			err := r.sendActivity("client123", "testuser", "token123", activity{
@@ -260,6 +339,99 @@ var _ = Describe("discordRPC", func() {
 				Type:        2,
 				State:       "Test Artist",
 				Details:     "Test Album",
+				Assets: activityAssets{
+					LargeImage: "https://example.com/art.jpg",
+					LargeText:  "Test Album",
+					SmallImage: navidromeLogoURL,
+					SmallText:  "Navidrome",
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("falls back to default image and clears SmallImage", func() {
+			// Track art fails (HTTP error), default image succeeds
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
+
+			// First call (track art) returns 500, second call (default) succeeds
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil).Once()
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/logo"}]`)}, nil).Once()
+
+			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
+				return strings.Contains(msg, `"op":3`) &&
+					strings.Contains(msg, `"large_image":"mp:external/logo"`) &&
+					!strings.Contains(msg, `"small_image":"mp:`) &&
+					!strings.Contains(msg, `"small_text":"Navidrome"`)
+			})).Return(nil)
+
+			err := r.sendActivity("client123", "testuser", "token123", activity{
+				Application: "client123",
+				Name:        "Test Song",
+				Type:        2,
+				State:       "Test Artist",
+				Details:     "Test Album",
+				Assets: activityAssets{
+					LargeImage: "https://example.com/art.jpg",
+					LargeText:  "Test Album",
+					SmallImage: navidromeLogoURL,
+					SmallText:  "Navidrome",
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("clears all images when both track art and default fail", func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{"not":"array"}`)}, nil)
+
+			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
+				return strings.Contains(msg, `"op":3`) &&
+					strings.Contains(msg, `"large_image":""`) &&
+					!strings.Contains(msg, `"small_image":"mp:`)
+			})).Return(nil)
+
+			err := r.sendActivity("client123", "testuser", "token123", activity{
+				Application: "client123",
+				Name:        "Test Song",
+				Type:        2,
+				State:       "Test Artist",
+				Details:     "Test Album",
+				Assets: activityAssets{
+					LargeImage: "https://example.com/art.jpg",
+					LargeText:  "Test Album",
+					SmallImage: navidromeLogoURL,
+					SmallText:  "Navidrome",
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("handles SmallImage processing failure gracefully", func() {
+			// LargeImage from cache (succeeds), SmallImage API fails
+			host.CacheMock.On("GetString", discordImageKey).Return("mp:cached/large", true, nil).Once()
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil).Once()
+
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil)
+
+			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
+				return strings.Contains(msg, `"large_image":"mp:cached/large"`) &&
+					!strings.Contains(msg, `"small_image":"mp:`)
+			})).Return(nil)
+
+			err := r.sendActivity("client123", "testuser", "token123", activity{
+				Application: "client123",
+				Name:        "Test Song",
+				Type:        2,
+				State:       "Test Artist",
+				Details:     "Test Album",
+				Assets: activityAssets{
+					LargeImage: "https://example.com/art.jpg",
+					LargeText:  "Test Album",
+					SmallImage: navidromeLogoURL,
+					SmallText:  "Navidrome",
+				},
 			})
 			Expect(err).ToNot(HaveOccurred())
 		})

@@ -84,17 +84,21 @@ func uploadToUguu(imageData []byte, contentType string) (string, error) {
 	body = append(body, imageData...)
 	body = append(body, []byte(fmt.Sprintf("\r\n--%s--\r\n", boundary))...)
 
-	req := pdk.NewHTTPRequest(pdk.MethodPost, "https://uguu.se/upload")
-	req.SetHeader("Content-Type", fmt.Sprintf("multipart/form-data; boundary=%s", boundary))
-	req.SetBody(body)
-
-	resp := req.Send()
-	if resp.Status() >= 400 {
-		return "", fmt.Errorf("uguu.se upload failed: HTTP %d", resp.Status())
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:  "POST",
+		URL:     "https://uguu.se/upload",
+		Headers: map[string]string{"Content-Type": fmt.Sprintf("multipart/form-data; boundary=%s", boundary)},
+		Body:    body,
+	})
+	if err != nil {
+		return "", fmt.Errorf("uguu.se upload failed: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("uguu.se upload failed: HTTP %d", resp.StatusCode)
 	}
 
 	var result uguuResponse
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return "", fmt.Errorf("failed to parse uguu.se response: %w", err)
 	}
 

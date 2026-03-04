@@ -3,6 +3,11 @@
 // This file handles all Discord gateway communication including WebSocket connections,
 // presence updates, and heartbeat management. The discordRPC struct implements WebSocket
 // callback interfaces and encapsulates all Discord communication logic.
+//
+// References:
+//   - Gateway Events (official): https://docs.discord.com/developers/events/gateway-events
+//   - Activity object (community): https://discord-api-types.dev/api/next/discord-api-types-v10/interface/GatewayActivity
+//   - Presence resources (community): https://docs.discord.food/resources/presence
 package main
 
 import (
@@ -15,16 +20,10 @@ import (
 	"github.com/navidrome/navidrome/plugins/pdk/go/websocket"
 )
 
-// Discord WebSocket Gateway constants
+// Image cache TTL constants
 const (
-	heartbeatOpCode = 1 // Heartbeat operation code
-	gateOpCode      = 2 // Identify operation code
-	presenceOpCode  = 3 // Presence update operation code
-)
-
-const (
-	heartbeatInterval = 41 // Heartbeat interval in seconds
-	defaultImage      = "https://i.imgur.com/hb3XPzA.png"
+	imageCacheTTL        int64 = 4 * 60 * 60  // 4 hours for track artwork
+	defaultImageCacheTTL int64 = 48 * 60 * 60 // 48 hours for default Navidrome logo
 )
 
 // Scheduler callback payloads for routing
@@ -35,6 +34,75 @@ const (
 
 // discordRPC handles Discord gateway communication and implements WebSocket callbacks.
 type discordRPC struct{}
+
+// ============================================================================
+// Discord types and constants
+// ============================================================================
+
+// Discord WebSocket Gateway constants
+const (
+	heartbeatOpCode = 1 // Heartbeat operation code
+	gateOpCode      = 2 // Identify operation code
+	presenceOpCode  = 3 // Presence update operation code
+)
+
+// Discord status_display_type values control how the activity is shown in the member list.
+const (
+	statusDisplayName    = 0 // Show activity name in member list
+	statusDisplayState   = 1 // Show state field in member list
+	statusDisplayDetails = 2 // Show details field in member list
+)
+
+const heartbeatInterval = 41 // Heartbeat interval in seconds
+
+// activity represents a Discord activity sent via Gateway opcode 3.
+type activity struct {
+	Name              string             `json:"name"`
+	Type              int                `json:"type"`
+	Details           string             `json:"details"`
+	DetailsURL        string             `json:"details_url,omitempty"`
+	State             string             `json:"state"`
+	StateURL          string             `json:"state_url,omitempty"`
+	Application       string             `json:"application_id"`
+	StatusDisplayType int                `json:"status_display_type"`
+	Timestamps        activityTimestamps `json:"timestamps"`
+	Assets            activityAssets     `json:"assets"`
+}
+
+type activityTimestamps struct {
+	Start int64 `json:"start"`
+	End   int64 `json:"end"`
+}
+
+type activityAssets struct {
+	LargeImage string `json:"large_image"`
+	LargeText  string `json:"large_text"`
+	LargeURL   string `json:"large_url,omitempty"`
+	SmallImage string `json:"small_image,omitempty"`
+	SmallText  string `json:"small_text,omitempty"`
+	SmallURL   string `json:"small_url,omitempty"`
+}
+
+// presencePayload represents a Discord presence update.
+type presencePayload struct {
+	Activities []activity `json:"activities"`
+	Since      int64      `json:"since"`
+	Status     string     `json:"status"`
+	Afk        bool       `json:"afk"`
+}
+
+// identifyPayload represents a Discord identify payload.
+type identifyPayload struct {
+	Token      string             `json:"token"`
+	Intents    int                `json:"intents"`
+	Properties identifyProperties `json:"properties"`
+}
+
+type identifyProperties struct {
+	OS      string `json:"os"`
+	Browser string `json:"browser"`
+	Device  string `json:"device"`
+}
 
 // ============================================================================
 // WebSocket Callback Implementation
@@ -63,59 +131,15 @@ func (r *discordRPC) OnClose(input websocket.OnCloseRequest) error {
 	return nil
 }
 
-// activity represents a Discord activity.
-type activity struct {
-	Name        string             `json:"name"`
-	Type        int                `json:"type"`
-	Details     string             `json:"details"`
-	State       string             `json:"state"`
-	Application string             `json:"application_id"`
-	Timestamps  activityTimestamps `json:"timestamps"`
-	Assets      activityAssets     `json:"assets"`
-}
-
-type activityTimestamps struct {
-	Start int64 `json:"start"`
-	End   int64 `json:"end"`
-}
-
-type activityAssets struct {
-	LargeImage string `json:"large_image"`
-	LargeText  string `json:"large_text"`
-}
-
-// presencePayload represents a Discord presence update.
-type presencePayload struct {
-	Activities []activity `json:"activities"`
-	Since      int64      `json:"since"`
-	Status     string     `json:"status"`
-	Afk        bool       `json:"afk"`
-}
-
-// identifyPayload represents a Discord identify payload.
-type identifyPayload struct {
-	Token      string             `json:"token"`
-	Intents    int                `json:"intents"`
-	Properties identifyProperties `json:"properties"`
-}
-
-type identifyProperties struct {
-	OS      string `json:"os"`
-	Browser string `json:"browser"`
-	Device  string `json:"device"`
-}
-
 // ============================================================================
 // Image Processing
 // ============================================================================
 
-// processImage processes an image URL for Discord, with fallback to default image.
-func (r *discordRPC) processImage(imageURL, clientID, token string, isDefaultImage bool) (string, error) {
+// processImage processes an image URL for Discord. Returns the processed image
+// string (mp:prefixed) or an error. No fallback logic — the caller handles retries.
+func (r *discordRPC) processImage(imageURL, clientID, token string, ttl int64) (string, error) {
 	if imageURL == "" {
-		if isDefaultImage {
-			return "", fmt.Errorf("default image URL is empty")
-		}
-		return r.processImage(defaultImage, clientID, token, true)
+		return "", fmt.Errorf("image URL is empty")
 	}
 
 	if strings.HasPrefix(imageURL, "mp:") {
@@ -123,7 +147,7 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, isDefaultIma
 	}
 
 	// Check cache first
-	cacheKey := fmt.Sprintf("discord.image.%x", imageURL)
+	cacheKey := "discord.image." + hashKey(imageURL)
 	cachedValue, exists, err := host.CacheGetString(cacheKey)
 	if err == nil && exists {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("Cache hit for image URL: %s", imageURL))
@@ -132,49 +156,35 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, isDefaultIma
 
 	// Process via Discord API
 	body := fmt.Sprintf(`{"urls":[%q]}`, imageURL)
-	req := pdk.NewHTTPRequest(pdk.MethodPost, fmt.Sprintf("https://discord.com/api/v9/applications/%s/external-assets", clientID))
-	req.SetHeader("Authorization", token)
-	req.SetHeader("Content-Type", "application/json")
-	req.SetBody([]byte(body))
-
-	resp := req.Send()
-	if resp.Status() >= 400 {
-		if isDefaultImage {
-			return "", fmt.Errorf("failed to process default image: HTTP %d", resp.Status())
-		}
-		return r.processImage(defaultImage, clientID, token, true)
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:  "POST",
+		URL:     fmt.Sprintf("https://discord.com/api/v9/applications/%s/external-assets", clientID),
+		Headers: map[string]string{"Authorization": token, "Content-Type": "application/json"},
+		Body:    []byte(body),
+	})
+	if err != nil {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("HTTP request failed for image processing: %v", err))
+		return "", fmt.Errorf("failed to process image: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("failed to process image: HTTP %d", resp.StatusCode)
 	}
 
 	var data []map[string]string
-	if err := json.Unmarshal(resp.Body(), &data); err != nil {
-		if isDefaultImage {
-			return "", fmt.Errorf("failed to unmarshal default image response: %w", err)
-		}
-		return r.processImage(defaultImage, clientID, token, true)
+	if err := json.Unmarshal(resp.Body, &data); err != nil {
+		return "", fmt.Errorf("failed to unmarshal image response: %w", err)
 	}
 
 	if len(data) == 0 {
-		if isDefaultImage {
-			return "", fmt.Errorf("no data returned for default image")
-		}
-		return r.processImage(defaultImage, clientID, token, true)
+		return "", fmt.Errorf("no data returned for image")
 	}
 
 	image := data[0]["external_asset_path"]
 	if image == "" {
-		if isDefaultImage {
-			return "", fmt.Errorf("empty external_asset_path for default image")
-		}
-		return r.processImage(defaultImage, clientID, token, true)
+		return "", fmt.Errorf("empty external_asset_path for image")
 	}
 
 	processedImage := fmt.Sprintf("mp:%s", image)
-
-	// Cache the processed image URL
-	var ttl int64 = 4 * 60 * 60 // 4 hours for regular images
-	if isDefaultImage {
-		ttl = 48 * 60 * 60 // 48 hours for default image
-	}
 
 	_ = host.CacheSetString(cacheKey, processedImage, ttl)
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("Cached processed image URL for %s (TTL: %ds)", imageURL, ttl))
@@ -190,12 +200,36 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, isDefaultIma
 func (r *discordRPC) sendActivity(clientID, username, token string, data activity) error {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Sending activity for user %s: %s - %s", username, data.Details, data.State))
 
-	processedImage, err := r.processImage(data.Assets.LargeImage, clientID, token, false)
+	// Try track artwork first, fall back to Navidrome logo
+	usingDefaultImage := false
+	processedImage, err := r.processImage(data.Assets.LargeImage, clientID, token, imageCacheTTL)
 	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to process image for user %s, continuing without image: %v", username, err))
-		data.Assets.LargeImage = ""
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to process track image for user %s: %v, falling back to default", username, err))
+		processedImage, err = r.processImage(navidromeLogoURL, clientID, token, defaultImageCacheTTL)
+		if err != nil {
+			pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to process default image for user %s: %v, continuing without image", username, err))
+			data.Assets.LargeImage = ""
+		} else {
+			data.Assets.LargeImage = processedImage
+			usingDefaultImage = true
+		}
 	} else {
 		data.Assets.LargeImage = processedImage
+	}
+
+	// Only show SmallImage (Navidrome logo overlay) when LargeImage is actual track artwork
+	if usingDefaultImage || data.Assets.LargeImage == "" {
+		data.Assets.SmallImage = ""
+		data.Assets.SmallText = ""
+	} else if data.Assets.SmallImage != "" {
+		processedSmall, err := r.processImage(data.Assets.SmallImage, clientID, token, defaultImageCacheTTL)
+		if err != nil {
+			pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to process small image for user %s: %v", username, err))
+			data.Assets.SmallImage = ""
+			data.Assets.SmallText = ""
+		} else {
+			data.Assets.SmallImage = processedSmall
+		}
 	}
 
 	presence := presencePayload{
@@ -236,14 +270,20 @@ func (r *discordRPC) sendMessage(username string, opCode int, payload any) error
 
 // getDiscordGateway retrieves the Discord gateway URL.
 func (r *discordRPC) getDiscordGateway() (string, error) {
-	req := pdk.NewHTTPRequest(pdk.MethodGet, "https://discord.com/api/gateway")
-	resp := req.Send()
-	if resp.Status() != 200 {
-		return "", fmt.Errorf("failed to get Discord gateway: HTTP %d", resp.Status())
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method: "GET",
+		URL:    "https://discord.com/api/gateway",
+	})
+	if err != nil {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("HTTP request failed for Discord gateway: %v", err))
+		return "", fmt.Errorf("failed to get Discord gateway: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("failed to get Discord gateway: HTTP %d", resp.StatusCode)
 	}
 
 	var result map[string]string
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+	if err := json.Unmarshal(resp.Body, &result); err != nil {
 		return "", fmt.Errorf("failed to parse Discord gateway response: %w", err)
 	}
 	return result["url"], nil
