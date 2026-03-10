@@ -223,6 +223,62 @@ var _ = Describe("discordPlugin", func() {
 			Entry("uses track album when configured", "Album", true, "Test Album", 0),
 			Entry("uses track artist when configured", "Artist", true, "Test Artist", 0),
 		)
+
+		DescribeTable("custom activity name template",
+			func(template string, templateExists bool, expectedName string) {
+				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
+				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
+				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", activityNameKey).Return("Custom", true)
+				pdk.PDKMock.On("GetConfig", activityNameTemplateKey).Return(template, templateExists)
+				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+
+				// Connect mocks
+				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
+				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
+				host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+					return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+				})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
+				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
+					return strings.Contains(url, "gateway.discord.gg")
+				}), mock.Anything, "testuser").Return("testuser", nil)
+
+				// Capture the activity payload sent to Discord
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+				host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
+				host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
+
+				// Image mocks
+				host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+				host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
+				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+				host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
+				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
+
+				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
+					Username: "testuser",
+					Position: 10,
+					Track: scrobbler.TrackInfo{
+						ID:       "track1",
+						Title:    "Test Song",
+						Artist:   "Test Artist",
+						Album:    "Test Album",
+						Duration: 180,
+					},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
+			},
+			Entry("uses custom template with all placeholders", "{artist} - {track} ({album})", true, "Test Artist - Test Song (Test Album)"),
+			Entry("uses custom template with only track", "{track}", true, "Test Song"),
+			Entry("uses custom template with only artist", "{artist}", true, "Test Artist"),
+			Entry("uses custom template with only album", "{album}", true, "Test Album"),
+			Entry("uses custom template with plain text", "Now Playing", true, "Now Playing"),
+			Entry("falls back to Navidrome when template is empty", "", false, "Navidrome"),
+		)
 	})
 
 	Describe("Scrobble", func() {
