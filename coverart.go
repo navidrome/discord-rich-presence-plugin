@@ -36,6 +36,57 @@ func headCoverArt(url string) string {
 	return location
 }
 
+const (
+	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved artwork
+	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for misses
+)
+
+// getImageViaCoverArt checks the Cover Art Archive for album artwork.
+// Tries the release first, then falls back to the release group.
+// Returns the archive.org image URL on success, "" on failure.
+func getImageViaCoverArt(mbzAlbumID, mbzReleaseGroupID string) string {
+	if mbzAlbumID == "" && mbzReleaseGroupID == "" {
+		return ""
+	}
+
+	// Determine cache key: use album ID when available, otherwise release group ID
+	cacheKey := "caa.artwork." + mbzAlbumID
+	if mbzAlbumID == "" {
+		cacheKey = "caa.artwork.rg." + mbzReleaseGroupID
+	}
+
+	// Check cache
+	cachedURL, exists, err := host.CacheGetString(cacheKey)
+	if err == nil && exists {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA cache hit for %s", cacheKey))
+		return cachedURL
+	}
+
+	// Try release first
+	var imageURL string
+	if mbzAlbumID != "" {
+		imageURL = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release/%s/front-500", mbzAlbumID))
+	}
+
+	// Fall back to release group
+	if imageURL == "" && mbzReleaseGroupID != "" {
+		imageURL = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-500", mbzReleaseGroupID))
+	}
+
+	// Cache the result (hit or miss)
+	ttl := caaCacheTTLHit
+	if imageURL == "" {
+		ttl = caaCacheTTLMiss
+	}
+	_ = host.CacheSetString(cacheKey, imageURL, ttl)
+
+	if imageURL != "" {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA resolved artwork for %s: %s", cacheKey, imageURL))
+	}
+
+	return imageURL
+}
+
 // uguu.se API response
 type uguuResponse struct {
 	Success bool `json:"success"`

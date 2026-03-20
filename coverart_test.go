@@ -161,3 +161,98 @@ var _ = Describe("getImageURL", func() {
 		})
 	})
 })
+
+var _ = Describe("getImageViaCoverArt", func() {
+	BeforeEach(func() {
+		pdk.ResetMock()
+		host.CacheMock.ExpectedCalls = nil
+		host.CacheMock.Calls = nil
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
+		pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
+	})
+
+	It("returns cached URL on cache hit", func() {
+		host.CacheMock.On("GetString", "caa.artwork.album-123").Return("https://archive.org/cached.jpg", true, nil)
+
+		result := getImageViaCoverArt("album-123", "rg-456")
+		Expect(result).To(Equal("https://archive.org/cached.jpg"))
+		host.HTTPMock.AssertNotCalled(GinkgoT(), "Send", mock.Anything)
+	})
+
+	It("returns empty on cache hit with empty string (known miss)", func() {
+		host.CacheMock.On("GetString", "caa.artwork.album-123").Return("", true, nil)
+
+		result := getImageViaCoverArt("album-123", "rg-456")
+		Expect(result).To(BeEmpty())
+		host.HTTPMock.AssertNotCalled(GinkgoT(), "Send", mock.Anything)
+	})
+
+	It("returns release URL on 307 and caches it", func() {
+		host.CacheMock.On("GetString", "caa.artwork.album-123").Return("", false, nil)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release/album-123/front-500"
+		})).Return(&host.HTTPResponse{
+			StatusCode: 307,
+			Headers:    map[string]string{"Location": "https://archive.org/release-art.jpg"},
+		}, nil)
+		host.CacheMock.On("SetString", "caa.artwork.album-123", "https://archive.org/release-art.jpg", int64(86400)).Return(nil)
+
+		result := getImageViaCoverArt("album-123", "rg-456")
+		Expect(result).To(Equal("https://archive.org/release-art.jpg"))
+		host.CacheMock.AssertCalled(GinkgoT(), "SetString", "caa.artwork.album-123", "https://archive.org/release-art.jpg", int64(86400))
+	})
+
+	It("falls back to release-group when release returns 404", func() {
+		host.CacheMock.On("GetString", "caa.artwork.album-123").Return("", false, nil)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release/album-123/front-500"
+		})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release-group/rg-456/front-500"
+		})).Return(&host.HTTPResponse{
+			StatusCode: 307,
+			Headers:    map[string]string{"Location": "https://archive.org/rg-art.jpg"},
+		}, nil)
+		host.CacheMock.On("SetString", "caa.artwork.album-123", "https://archive.org/rg-art.jpg", int64(86400)).Return(nil)
+
+		result := getImageViaCoverArt("album-123", "rg-456")
+		Expect(result).To(Equal("https://archive.org/rg-art.jpg"))
+	})
+
+	It("caches empty string when both release and release-group fail", func() {
+		host.CacheMock.On("GetString", "caa.artwork.album-123").Return("", false, nil)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release/album-123/front-500"
+		})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release-group/rg-456/front-500"
+		})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+		host.CacheMock.On("SetString", "caa.artwork.album-123", "", int64(14400)).Return(nil)
+
+		result := getImageViaCoverArt("album-123", "rg-456")
+		Expect(result).To(BeEmpty())
+		host.CacheMock.AssertCalled(GinkgoT(), "SetString", "caa.artwork.album-123", "", int64(14400))
+	})
+
+	It("tries only release-group when MBZAlbumID is empty", func() {
+		host.CacheMock.On("GetString", "caa.artwork.rg.rg-456").Return("", false, nil)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release-group/rg-456/front-500"
+		})).Return(&host.HTTPResponse{
+			StatusCode: 307,
+			Headers:    map[string]string{"Location": "https://archive.org/rg-art.jpg"},
+		}, nil)
+		host.CacheMock.On("SetString", "caa.artwork.rg.rg-456", "https://archive.org/rg-art.jpg", int64(86400)).Return(nil)
+
+		result := getImageViaCoverArt("", "rg-456")
+		Expect(result).To(Equal("https://archive.org/rg-art.jpg"))
+	})
+
+	It("returns empty when both IDs are empty", func() {
+		result := getImageViaCoverArt("", "")
+		Expect(result).To(BeEmpty())
+		host.HTTPMock.AssertNotCalled(GinkgoT(), "Send", mock.Anything)
+		host.CacheMock.AssertNotCalled(GinkgoT(), "GetString", mock.Anything)
+	})
+})
