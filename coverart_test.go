@@ -5,6 +5,7 @@ import (
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
+	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 	"github.com/stretchr/testify/mock"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -80,40 +81,42 @@ var _ = Describe("getImageURL", func() {
 
 	Describe("uguu disabled (default)", func() {
 		BeforeEach(func() {
+			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
 		})
 
 		It("returns artwork URL directly", func() {
 			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(Equal("https://example.com/art.jpg"))
 		})
 
 		It("returns empty for localhost URL", func() {
 			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("http://localhost:4533/art.jpg", nil)
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(BeEmpty())
 		})
 
 		It("returns empty when artwork fetch fails", func() {
 			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("", errors.New("not found"))
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(BeEmpty())
 		})
 	})
 
 	Describe("uguu enabled", func() {
 		BeforeEach(func() {
+			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("true", true)
 		})
 
 		It("returns cached URL when available", func() {
 			host.CacheMock.On("GetString", "uguu.artwork.track1").Return("https://a.uguu.se/cached.jpg", true, nil)
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(Equal("https://a.uguu.se/cached.jpg"))
 		})
 
@@ -133,7 +136,7 @@ var _ = Describe("getImageURL", func() {
 			// Mock cache set
 			host.CacheMock.On("SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", int64(9000)).Return(nil)
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(Equal("https://a.uguu.se/uploaded.jpg"))
 			host.CacheMock.AssertCalled(GinkgoT(), "SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", int64(9000))
 		})
@@ -143,7 +146,7 @@ var _ = Describe("getImageURL", func() {
 			host.SubsonicAPIMock.On("CallRaw", "/getCoverArt?u=testuser&id=track1&size=300").
 				Return("", []byte(nil), errors.New("fetch failed"))
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(BeEmpty())
 		})
 
@@ -156,8 +159,74 @@ var _ = Describe("getImageURL", func() {
 				return req.URL == "https://uguu.se/upload"
 			})).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`{"success":false}`)}, nil)
 
-			url := getImageURL("testuser", "track1")
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(BeEmpty())
+		})
+	})
+
+	Describe("CAA enabled", func() {
+		BeforeEach(func() {
+			pdk.PDKMock.ExpectedCalls = nil
+			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
+			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("true", true)
+			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+		})
+
+		It("returns CAA URL when release HEAD succeeds", func() {
+			host.CacheMock.On("GetString", "caa.artwork.album-id").Return("", false, nil)
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://coverartarchive.org/release/album-id/front-500"
+			})).Return(&host.HTTPResponse{
+				StatusCode: 307,
+				Headers:    map[string]string{"Location": "https://archive.org/art.jpg"},
+			}, nil)
+			host.CacheMock.On("SetString", "caa.artwork.album-id", "https://archive.org/art.jpg", int64(86400)).Return(nil)
+
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1", MBZAlbumID: "album-id", MBZReleaseGroupID: "rg-id"})
+			Expect(url).To(Equal("https://archive.org/art.jpg"))
+			host.ArtworkMock.AssertNotCalled(GinkgoT(), "GetTrackUrl", mock.Anything, mock.Anything)
+			host.SubsonicAPIMock.AssertNotCalled(GinkgoT(), "CallRaw", mock.Anything)
+		})
+
+		It("falls through to direct when CAA misses and uguu is disabled", func() {
+			host.CacheMock.On("GetString", "caa.artwork.album-id").Return("", false, nil)
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://coverartarchive.org/release/album-id/front-500"
+			})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://coverartarchive.org/release-group/rg-id/front-500"
+			})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+			host.CacheMock.On("SetString", "caa.artwork.album-id", "", int64(14400)).Return(nil)
+			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1", MBZAlbumID: "album-id", MBZReleaseGroupID: "rg-id"})
+			Expect(url).To(Equal("https://example.com/art.jpg"))
+		})
+
+		It("falls through to uguu when CAA misses and uguu is enabled", func() {
+			pdk.PDKMock.ExpectedCalls = nil
+			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
+			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("true", true)
+			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("true", true)
+
+			host.CacheMock.On("GetString", "caa.artwork.rg.rg-id").Return("", false, nil)
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.URL == "https://coverartarchive.org/release-group/rg-id/front-500"
+			})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+			host.CacheMock.On("SetString", "caa.artwork.rg.rg-id", "", int64(14400)).Return(nil)
+
+			host.CacheMock.On("GetString", "uguu.artwork.track1").Return("https://a.uguu.se/cached.jpg", true, nil)
+
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1", MBZReleaseGroupID: "rg-id"})
+			Expect(url).To(Equal("https://a.uguu.se/cached.jpg"))
+		})
+
+		It("skips CAA when no MBZ IDs are present", func() {
+			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+
+			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
+			Expect(url).To(Equal("https://example.com/art.jpg"))
+			host.HTTPMock.AssertNotCalled(GinkgoT(), "Send", mock.Anything)
 		})
 	})
 })

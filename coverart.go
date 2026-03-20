@@ -7,6 +7,7 @@ import (
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
+	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 )
 
 // Configuration key for uguu.se image hosting
@@ -95,13 +96,22 @@ type uguuResponse struct {
 	} `json:"files"`
 }
 
-// getImageURL retrieves the track artwork URL, optionally uploading to uguu.se.
-func getImageURL(username, trackID string) string {
+// getImageURL retrieves the track artwork URL, checking CAA first if enabled,
+// then uguu.se, then direct Navidrome URL.
+func getImageURL(username string, track scrobbler.TrackInfo) string {
+	caaEnabled, _ := pdk.GetConfig(caaEnabledKey)
+	if caaEnabled == "true" {
+		if url := getImageViaCoverArt(track.MBZAlbumID, track.MBZReleaseGroupID); url != "" {
+			return url
+		}
+	}
+
 	uguuEnabled, _ := pdk.GetConfig(uguuEnabledKey)
 	if uguuEnabled == "true" {
-		return getImageViaUguu(username, trackID)
+		return getImageViaUguu(username, track.ID)
 	}
-	return getImageDirect(trackID)
+
+	return getImageDirect(track.ID)
 }
 
 // getImageDirect returns the artwork URL directly from Navidrome (current behavior).
