@@ -11,6 +11,59 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("headCoverArt", func() {
+	BeforeEach(func() {
+		pdk.ResetMock()
+		host.HTTPMock.ExpectedCalls = nil
+		host.HTTPMock.Calls = nil
+		pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
+	})
+
+	It("returns Location header on 307 response", func() {
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.Method == "HEAD" &&
+				req.URL == "https://coverartarchive.org/release/test-mbid/front-500" &&
+				req.NoFollowRedirects == true
+		})).Return(&host.HTTPResponse{
+			StatusCode: 307,
+			Headers:    map[string]string{"Location": "https://archive.org/download/mbid-test/thumb500.jpg"},
+		}, nil)
+
+		result := headCoverArt("https://coverartarchive.org/release/test-mbid/front-500")
+		Expect(result).To(Equal("https://archive.org/download/mbid-test/thumb500.jpg"))
+	})
+
+	It("returns empty string on 404 response", func() {
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.Method == "HEAD" && req.NoFollowRedirects == true
+		})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
+
+		result := headCoverArt("https://coverartarchive.org/release/no-art/front-500")
+		Expect(result).To(BeEmpty())
+	})
+
+	It("returns empty string on HTTP error", func() {
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.Method == "HEAD"
+		})).Return((*host.HTTPResponse)(nil), errors.New("connection refused"))
+
+		result := headCoverArt("https://coverartarchive.org/release/err/front-500")
+		Expect(result).To(BeEmpty())
+	})
+
+	It("returns empty string when Location header is missing on 307", func() {
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.Method == "HEAD"
+		})).Return(&host.HTTPResponse{
+			StatusCode: 307,
+			Headers:    map[string]string{},
+		}, nil)
+
+		result := headCoverArt("https://coverartarchive.org/release/no-location/front-500")
+		Expect(result).To(BeEmpty())
+	})
+})
+
 var _ = Describe("getImageURL", func() {
 	BeforeEach(func() {
 		pdk.ResetMock()

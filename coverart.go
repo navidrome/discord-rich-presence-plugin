@@ -12,6 +12,30 @@ import (
 // Configuration key for uguu.se image hosting
 const uguuEnabledKey = "uguuenabled"
 
+const caaEnabledKey = "caaenabled"
+
+// headCoverArt sends a HEAD request to the given CAA URL without following redirects.
+// Returns the Location header value on 307 (image exists), or "" otherwise.
+func headCoverArt(url string) string {
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:            "HEAD",
+		URL:               url,
+		NoFollowRedirects: true,
+	})
+	if err != nil {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD request failed for %s: %v", url, err))
+		return ""
+	}
+	if resp.StatusCode != 307 {
+		return ""
+	}
+	location := resp.Headers["Location"]
+	if location == "" {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("CAA returned 307 but no Location header for %s", url))
+	}
+	return location
+}
+
 // uguu.se API response
 type uguuResponse struct {
 	Success bool `json:"success"`
