@@ -20,7 +20,7 @@ var _ = Describe("headCoverArt", func() {
 		pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
 	})
 
-	It("returns Location header on 307 response", func() {
+	It("returns Location header and definitive=true on 307 response", func() {
 		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
 			return req.Method == "HEAD" &&
 				req.URL == "https://coverartarchive.org/release/test-mbid/front-500" &&
@@ -30,29 +30,32 @@ var _ = Describe("headCoverArt", func() {
 			Headers:    map[string]string{"Location": "https://archive.org/download/mbid-test/thumb500.jpg"},
 		}, nil)
 
-		result := headCoverArt("https://coverartarchive.org/release/test-mbid/front-500")
+		result, definitive := headCoverArt("https://coverartarchive.org/release/test-mbid/front-500")
 		Expect(result).To(Equal("https://archive.org/download/mbid-test/thumb500.jpg"))
+		Expect(definitive).To(BeTrue())
 	})
 
-	It("returns empty string on 404 response", func() {
+	It("returns empty and definitive=true on 404 response", func() {
 		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
 			return req.Method == "HEAD" && req.NoFollowRedirects == true
 		})).Return(&host.HTTPResponse{StatusCode: 404}, nil)
 
-		result := headCoverArt("https://coverartarchive.org/release/no-art/front-500")
+		result, definitive := headCoverArt("https://coverartarchive.org/release/no-art/front-500")
 		Expect(result).To(BeEmpty())
+		Expect(definitive).To(BeTrue())
 	})
 
-	It("returns empty string on HTTP error", func() {
+	It("returns empty and definitive=false on HTTP error", func() {
 		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
 			return req.Method == "HEAD"
 		})).Return((*host.HTTPResponse)(nil), errors.New("connection refused"))
 
-		result := headCoverArt("https://coverartarchive.org/release/err/front-500")
+		result, definitive := headCoverArt("https://coverartarchive.org/release/err/front-500")
 		Expect(result).To(BeEmpty())
+		Expect(definitive).To(BeFalse())
 	})
 
-	It("returns empty string when Location header is missing on 307", func() {
+	It("returns empty and definitive=true when Location header is missing on 307", func() {
 		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
 			return req.Method == "HEAD"
 		})).Return(&host.HTTPResponse{
@@ -60,8 +63,9 @@ var _ = Describe("headCoverArt", func() {
 			Headers:    map[string]string{},
 		}, nil)
 
-		result := headCoverArt("https://coverartarchive.org/release/no-location/front-500")
+		result, definitive := headCoverArt("https://coverartarchive.org/release/no-location/front-500")
 		Expect(result).To(BeEmpty())
+		Expect(definitive).To(BeTrue())
 	})
 })
 
@@ -302,6 +306,22 @@ var _ = Describe("getImageViaCoverArt", func() {
 		result := getImageViaCoverArt("album-123", "rg-456")
 		Expect(result).To(BeEmpty())
 		host.CacheMock.AssertCalled(GinkgoT(), "SetString", "caa.artwork.album-123", "", int64(14400))
+	})
+
+	It("does not cache miss on transient failure", func() {
+		host.CacheMock.On("GetString", "caa.artwork.album-123").Return("", false, nil)
+		// Both requests fail with network errors (transient)
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release/album-123/front-500"
+		})).Return((*host.HTTPResponse)(nil), errors.New("connection refused"))
+		host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+			return req.URL == "https://coverartarchive.org/release-group/rg-456/front-500"
+		})).Return((*host.HTTPResponse)(nil), errors.New("timeout"))
+
+		result := getImageViaCoverArt("album-123", "rg-456")
+		Expect(result).To(BeEmpty())
+		// Should NOT cache the miss since failures were transient
+		host.CacheMock.AssertNotCalled(GinkgoT(), "SetString", mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	It("tries only release-group when MBZAlbumID is empty", func() {

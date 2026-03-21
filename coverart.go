@@ -20,8 +20,10 @@ const (
 )
 
 // headCoverArt sends a HEAD request to the given CAA URL without following redirects.
-// Returns the Location header value on 307 (image exists), or "" otherwise.
-func headCoverArt(url string) string {
+// Returns (location, true) on 307 with a Location header (image exists),
+// ("", true) on 404 (definitive miss — safe to cache),
+// ("", false) on network errors or unexpected responses (transient — do not cache).
+func headCoverArt(url string) (string, bool) {
 	resp, err := host.HTTPSend(host.HTTPRequest{
 		Method:            "HEAD",
 		URL:               url,
@@ -30,16 +32,20 @@ func headCoverArt(url string) string {
 	})
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD request failed for %s: %v", url, err))
-		return ""
+		return "", false
+	}
+	if resp.StatusCode == 404 {
+		return "", true
 	}
 	if resp.StatusCode != 307 {
-		return ""
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD unexpected status %d for %s", resp.StatusCode, url))
+		return "", false
 	}
 	location := resp.Headers["Location"]
 	if location == "" {
 		pdk.Log(pdk.LogWarn, fmt.Sprintf("CAA returned 307 but no Location header for %s", url))
 	}
-	return location
+	return location, true
 }
 
 // getImageViaCoverArt checks the Cover Art Archive for album artwork.
@@ -65,21 +71,23 @@ func getImageViaCoverArt(mbzAlbumID, mbzReleaseGroupID string) string {
 
 	// Try release first
 	var imageURL string
+	definitive := false
 	if mbzAlbumID != "" {
-		imageURL = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release/%s/front-500", mbzAlbumID))
+		imageURL, definitive = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release/%s/front-500", mbzAlbumID))
 	}
 
 	// Fall back to release group
 	if imageURL == "" && mbzReleaseGroupID != "" {
-		imageURL = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-500", mbzReleaseGroupID))
+		imageURL, definitive = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-500", mbzReleaseGroupID))
 	}
 
-	// Cache the result (hit or miss)
-	ttl := caaCacheTTLHit
-	if imageURL == "" {
-		ttl = caaCacheTTLMiss
+	// Cache hits always; only cache misses if the response was definitive (404),
+	// not transient failures (network errors, 5xx) which should be retried sooner.
+	if imageURL != "" {
+		_ = host.CacheSetString(cacheKey, imageURL, caaCacheTTLHit)
+	} else if definitive {
+		_ = host.CacheSetString(cacheKey, "", caaCacheTTLMiss)
 	}
-	_ = host.CacheSetString(cacheKey, imageURL, ttl)
 
 	if imageURL != "" {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA resolved artwork for %s: %s", cacheKey, imageURL))
