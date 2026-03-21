@@ -134,11 +134,11 @@ var _ = Describe("getImageURL", func() {
 			})).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{"success":true,"files":[{"url":"https://a.uguu.se/uploaded.jpg"}]}`)}, nil)
 
 			// Mock cache set
-			host.CacheMock.On("SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", int64(9000)).Return(nil)
+			host.CacheMock.On("SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", uguuCacheTTL).Return(nil)
 
 			url := getImageURL("testuser", scrobbler.TrackInfo{ID: "track1"})
 			Expect(url).To(Equal("https://a.uguu.se/uploaded.jpg"))
-			host.CacheMock.AssertCalled(GinkgoT(), "SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", int64(9000))
+			host.CacheMock.AssertCalled(GinkgoT(), "SetString", "uguu.artwork.track1", "https://a.uguu.se/uploaded.jpg", uguuCacheTTL)
 		})
 
 		It("returns empty when artwork data fetch fails", func() {

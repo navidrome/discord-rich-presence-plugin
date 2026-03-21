@@ -10,11 +10,6 @@ import (
 	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 )
 
-// Configuration key for uguu.se image hosting
-const uguuEnabledKey = "uguuenabled"
-
-const caaEnabledKey = "caaenabled"
-
 // headCoverArt sends a HEAD request to the given CAA URL without following redirects.
 // Returns the Location header value on 307 (image exists), or "" otherwise.
 func headCoverArt(url string) string {
@@ -22,6 +17,7 @@ func headCoverArt(url string) string {
 		Method:            "HEAD",
 		URL:               url,
 		NoFollowRedirects: true,
+		TimeoutMs:         5000, // 5s timeout to avoid blocking NowPlaying
 	})
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD request failed for %s: %v", url, err))
@@ -37,9 +33,11 @@ func headCoverArt(url string) string {
 	return location
 }
 
+// Cache TTLs for cover art lookups
 const (
-	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved artwork
-	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for misses
+	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved CAA artwork
+	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for CAA misses
+	uguuCacheTTL    int64 = 9000         // ~2.5 hours for uguu.se uploads
 )
 
 // getImageViaCoverArt checks the Cover Art Archive for album artwork.
@@ -153,7 +151,7 @@ func getImageViaUguu(username, trackID string) string {
 		return ""
 	}
 
-	_ = host.CacheSetString(cacheKey, url, 9000)
+	_ = host.CacheSetString(cacheKey, url, uguuCacheTTL)
 	return url
 }
 

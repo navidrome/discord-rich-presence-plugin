@@ -29,6 +29,8 @@ const (
 	usersKey        = "users"
 	activityNameKey = "activityname"
 	spotifyLinksKey = "spotifylinks"
+	caaEnabledKey   = "caaenabled"
+	uguuEnabledKey  = "uguuenabled"
 )
 
 const (
