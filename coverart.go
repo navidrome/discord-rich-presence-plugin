@@ -37,7 +37,7 @@ func headCoverArt(url string) string {
 const (
 	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved CAA artwork
 	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for CAA misses
-	uguuCacheTTL    int64 = 9000         // ~2.5 hours for uguu.se uploads
+	uguuCacheTTL    int64 = 150 * 60     // 2.5 hours for uguu.se uploads
 )
 
 // getImageViaCoverArt checks the Cover Art Archive for album artwork.

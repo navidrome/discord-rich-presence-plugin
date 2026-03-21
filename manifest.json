@@ -61,15 +61,15 @@
           ],
           "default": "Default"
         },
-        "uguuenabled": {
-          "type": "boolean",
-          "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
-          "default": false
-        },
         "caaenabled": {
           "type": "boolean",
           "title": "Use artwork from Cover Art Archive (for MusicBrainz-tagged music)",
           "description": "When enabled, attempts to fetch album artwork from the Cover Art Archive using MusicBrainz IDs. Takes priority over other artwork methods.",
+          "default": false
+        },
+        "uguuenabled": {
+          "type": "boolean",
+          "title": "Upload artwork to uguu.se (enable if Navidrome is not publicly accessible)",
           "default": false
         },
         "spotifylinks": {
