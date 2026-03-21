@@ -10,6 +10,15 @@ import (
 	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 )
 
+// Cache TTLs for cover art lookups
+const (
+	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved CAA artwork
+	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for CAA misses
+	uguuCacheTTL    int64 = 150 * 60     // 2.5 hours for uguu.se uploads
+
+	caaTimeOut = 4000 // 4 seconds timeout for CAA HEAD requests to avoid blocking NowPlaying
+)
+
 // headCoverArt sends a HEAD request to the given CAA URL without following redirects.
 // Returns the Location header value on 307 (image exists), or "" otherwise.
 func headCoverArt(url string) string {
@@ -17,7 +26,7 @@ func headCoverArt(url string) string {
 		Method:            "HEAD",
 		URL:               url,
 		NoFollowRedirects: true,
-		TimeoutMs:         5000, // 5s timeout to avoid blocking NowPlaying
+		TimeoutMs:         caaTimeOut,
 	})
 	if err != nil {
 		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD request failed for %s: %v", url, err))
@@ -32,13 +41,6 @@ func headCoverArt(url string) string {
 	}
 	return location
 }
-
-// Cache TTLs for cover art lookups
-const (
-	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved CAA artwork
-	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for CAA misses
-	uguuCacheTTL    int64 = 150 * 60     // 2.5 hours for uguu.se uploads
-)
 
 // getImageViaCoverArt checks the Cover Art Archive for album artwork.
 // Tries the release first, then falls back to the release group.
