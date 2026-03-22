@@ -2,3 +2,4 @@
 *.ndp
 tmp
 discord-rich-presence
+.DS_Store

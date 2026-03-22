@@ -28,6 +28,7 @@ const (
 	clientIDKey     = "clientid"
 	usersKey        = "users"
 	activityNameKey = "activityname"
+  activityNameTemplateKey = "activitynametemplate"
 	spotifyLinksKey = "spotifylinks"
 	caaEnabledKey   = "caaenabled"
 	uguuEnabledKey  = "uguuenabled"
@@ -47,6 +48,7 @@ const (
 	activityNameTrack   = "Track"
 	activityNameArtist  = "Artist"
 	activityNameAlbum   = "Album"
+	activityNameCustom  = "Custom"
 )
 
 // userToken represents a user-token mapping from the config
@@ -170,6 +172,16 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 	case activityNameArtist:
 		activityName = input.Track.Artist
 		statusDisplayType = statusDisplayName
+	case activityNameCustom:
+		template, _ := pdk.GetConfig(activityNameTemplateKey)
+		if template != "" {
+			r := strings.NewReplacer(
+				"{track}", input.Track.Title,
+				"{artist}", input.Track.Artist,
+				"{album}", input.Track.Album,
+			)
+			activityName = r.Replace(template)
+		}
 	}
 
 	// Resolve Spotify URLs if enabled
