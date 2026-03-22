@@ -25,11 +25,13 @@ import (
 
 // Configuration keys
 const (
-	clientIDKey             = "clientid"
-	usersKey                = "users"
-	activityNameKey         = "activityname"
-	activityNameTemplateKey = "activitynametemplate"
-	spotifyLinksKey         = "spotifylinks"
+	clientIDKey     = "clientid"
+	usersKey        = "users"
+	activityNameKey = "activityname"
+  activityNameTemplateKey = "activitynametemplate"
+	spotifyLinksKey = "spotifylinks"
+	caaEnabledKey   = "caaenabled"
+	uguuEnabledKey  = "uguuenabled"
 )
 
 const (
@@ -205,7 +207,7 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 			End:   endTime,
 		},
 		Assets: activityAssets{
-			LargeImage: getImageURL(input.Username, input.Track.ID),
+			LargeImage: getImageURL(input.Username, input.Track),
 			LargeText:  input.Track.Album,
 			LargeURL:   spotifyURL,
 			SmallImage: navidromeLogoURL,

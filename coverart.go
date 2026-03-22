@@ -7,10 +7,94 @@ import (
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
+	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
 )
 
-// Configuration key for uguu.se image hosting
-const uguuEnabledKey = "uguuenabled"
+// Cache TTLs for cover art lookups
+const (
+	caaCacheTTLHit  int64 = 24 * 60 * 60 // 24 hours for resolved CAA artwork
+	caaCacheTTLMiss int64 = 4 * 60 * 60  // 4 hours for CAA misses
+	uguuCacheTTL    int64 = 150 * 60     // 2.5 hours for uguu.se uploads
+
+	caaTimeOut = 4000 // 4 seconds timeout for CAA HEAD requests to avoid blocking NowPlaying
+)
+
+// headCoverArt sends a HEAD request to the given CAA URL without following redirects.
+// Returns (location, true) on 307 with a Location header (image exists),
+// ("", true) on 404 (definitive miss — safe to cache),
+// ("", false) on network errors or unexpected responses (transient — do not cache).
+func headCoverArt(url string) (string, bool) {
+	resp, err := host.HTTPSend(host.HTTPRequest{
+		Method:            "HEAD",
+		URL:               url,
+		NoFollowRedirects: true,
+		TimeoutMs:         caaTimeOut,
+	})
+	if err != nil {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD request failed for %s: %v", url, err))
+		return "", false
+	}
+	if resp.StatusCode == 404 {
+		return "", true
+	}
+	if resp.StatusCode != 307 {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA HEAD unexpected status %d for %s", resp.StatusCode, url))
+		return "", false
+	}
+	location := resp.Headers["Location"]
+	if location == "" {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("CAA returned 307 but no Location header for %s", url))
+	}
+	return location, true
+}
+
+// getImageViaCoverArt checks the Cover Art Archive for album artwork.
+// Tries the release first, then falls back to the release group.
+// Returns the archive.org image URL on success, "" on failure.
+func getImageViaCoverArt(mbzAlbumID, mbzReleaseGroupID string) string {
+	if mbzAlbumID == "" && mbzReleaseGroupID == "" {
+		return ""
+	}
+
+	// Determine cache key: use album ID when available, otherwise release group ID
+	cacheKey := "caa.artwork." + mbzAlbumID
+	if mbzAlbumID == "" {
+		cacheKey = "caa.artwork.rg." + mbzReleaseGroupID
+	}
+
+	// Check cache
+	cachedURL, exists, err := host.CacheGetString(cacheKey)
+	if err == nil && exists {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA cache hit for %s", cacheKey))
+		return cachedURL
+	}
+
+	// Try release first
+	var imageURL string
+	definitive := false
+	if mbzAlbumID != "" {
+		imageURL, definitive = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release/%s/front-500", mbzAlbumID))
+	}
+
+	// Fall back to release group
+	if imageURL == "" && mbzReleaseGroupID != "" {
+		imageURL, definitive = headCoverArt(fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-500", mbzReleaseGroupID))
+	}
+
+	// Cache hits always; only cache misses if the response was definitive (404),
+	// not transient failures (network errors, 5xx) which should be retried sooner.
+	if imageURL != "" {
+		_ = host.CacheSetString(cacheKey, imageURL, caaCacheTTLHit)
+	} else if definitive {
+		_ = host.CacheSetString(cacheKey, "", caaCacheTTLMiss)
+	}
+
+	if imageURL != "" {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("CAA resolved artwork for %s: %s", cacheKey, imageURL))
+	}
+
+	return imageURL
+}
 
 // uguu.se API response
 type uguuResponse struct {
@@ -20,13 +104,22 @@ type uguuResponse struct {
 	} `json:"files"`
 }
 
-// getImageURL retrieves the track artwork URL, optionally uploading to uguu.se.
-func getImageURL(username, trackID string) string {
+// getImageURL retrieves the track artwork URL, checking CAA first if enabled,
+// then uguu.se, then direct Navidrome URL.
+func getImageURL(username string, track scrobbler.TrackInfo) string {
+	caaEnabled, _ := pdk.GetConfig(caaEnabledKey)
+	if caaEnabled == "true" {
+		if url := getImageViaCoverArt(track.MBZAlbumID, track.MBZReleaseGroupID); url != "" {
+			return url
+		}
+	}
+
 	uguuEnabled, _ := pdk.GetConfig(uguuEnabledKey)
 	if uguuEnabled == "true" {
-		return getImageViaUguu(username, trackID)
+		return getImageViaUguu(username, track.ID)
 	}
-	return getImageDirect(trackID)
+
+	return getImageDirect(track.ID)
 }
 
 // getImageDirect returns the artwork URL directly from Navidrome (current behavior).
@@ -68,7 +161,7 @@ func getImageViaUguu(username, trackID string) string {
 		return ""
 	}
 
-	_ = host.CacheSetString(cacheKey, url, 9000)
+	_ = host.CacheSetString(cacheKey, url, uguuCacheTTL)
 	return url
 }
 
