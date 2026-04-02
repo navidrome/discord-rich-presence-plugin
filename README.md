@@ -3,7 +3,7 @@
 [![Build](https://github.com/navidrome/discord-rich-presence-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/navidrome/discord-rich-presence-plugin/actions/workflows/build.yml)
 [![Latest](https://img.shields.io/github/v/release/navidrome/discord-rich-presence-plugin)](https://github.com/navidrome/discord-rich-presence-plugin/releases/latest/download/discord-rich-presence.ndp)
 
-**Attention: This plugin requires Navidrome 0.60.2 or later.**
+**Attention: This plugin requires Navidrome 0.61.0 or later.**
 
 This plugin integrates Navidrome with Discord Rich Presence, displaying your currently playing track in your Discord status. 
 The goal is to demonstrate the capabilities of Navidrome's plugin system by implementing a real-time presence feature using Discord's Gateway API.
@@ -23,9 +23,10 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 - Displays playback progress with start/end timestamps
 - Automatic presence clearing when track finishes
 - Multi-user support with individual Discord tokens
+- Optional album art from [Cover Art Archive](https://coverartarchive.org) for MusicBrainz-tagged music
 - Optional image hosting via [uguu.se](https://uguu.se) for non-public Navidrome instances
 
-<img alt="Discord Rich Presence showing currently playing track with album art, artist, and playback progress" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/screenshot.png">
+<img alt="Discord Rich Presence showing currently playing track with album art, artist, and playback progress" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/ss-richpresence.webp">
 
 
 ## Installation
@@ -50,6 +51,7 @@ We don't provide instructions for obtaining the token as it may violate Discord'
    - **Client ID**: Your Discord Application ID from Step 2
     - **Activity Name Display**: Choose what to show as the activity name (Default, Track, Album, Artist)
       - "Default" is recommended to help spread awareness of your favorite music server 😉, but feel free to choose the option that best suits your preferences
+   - **Use artwork from Cover Art Archive**: Enable this if your music has MusicBrainz tags (see Album Art section below)
    - **Upload to uguu.se**: Enable this if your Navidrome isn't publicly accessible (see Album Art section below)
    - **Enable Spotify link-through**: Enable this to make track title and album art clickable links to Spotify
    - **Users**: Add your Navidrome username and Discord token from Step 3
@@ -83,7 +85,18 @@ For album artwork to display in Discord, Discord needs to be able to access the 
 2. **Restart Navidrome** (required for ND_BASEURL changes)
 3. In plugin settings: **Disable** "Upload to uguu.se"
 
-### Option 2: Private Instance with uguu.se Upload
+### Option 2: Cover Art Archive (for MusicBrainz-tagged music)
+**Use this if**: Your music is tagged with MusicBrainz IDs
+
+**Setup**:
+1. In plugin settings: **Enable** "Use artwork from Cover Art Archive"
+2. No other configuration needed
+
+**How it works**: The plugin checks the [Cover Art Archive](https://coverartarchive.org) for album artwork using the track's MusicBrainz Release ID. If the specific release has no art, it falls back to the Release Group (which finds art from any edition of the same album). The resolved image URL is passed directly to Discord — no upload needed. Results are cached for 24 hours.
+
+**Note**: This option takes priority over uguu.se and direct Navidrome URLs when enabled. It only works for tracks that have MusicBrainz IDs in their metadata — tracks without IDs will fall through to the next method.
+
+### Option 3: Private Instance with uguu.se Upload
 **Use this if**: Your Navidrome is only accessible locally (home network, behind VPN, etc.)
 
 **Setup**:
@@ -95,11 +108,14 @@ For album artwork to display in Discord, Discord needs to be able to access the 
 ### Troubleshooting Album Art
 - **No album art showing**: Check Navidrome logs for errors
 - **Using public instance**: Verify ND_BASEURL is correct and Navidrome was restarted
+- **Using Cover Art Archive**: Verify your music has MusicBrainz IDs (check file tags for `MUSICBRAINZ_ALBUMID`)
 - **Using uguu.se**: Check that the option is enabled and your server has internet access
 
 ## Configuration
 
 Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Rich Presence**
+
+<img alt="Plugin configuration panel showing all available settings" src="https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/master/.github/ss-config.webp">
 
 ### Configuration Fields
 
@@ -118,6 +134,11 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
   - **Track**: Shows the currently playing track title
   - **Album**: Shows the currently playing track's album name
   - **Artist**: Shows the currently playing track's artist name
+
+#### Use artwork from Cover Art Archive
+- **When to enable**: Your music is tagged with MusicBrainz IDs and you want album art from the Cover Art Archive
+- **What it does**: Checks the [Cover Art Archive](https://coverartarchive.org) for artwork using MusicBrainz Release ID, with a fallback to Release Group ID. Takes priority over other artwork methods when enabled.
+- **When to disable**: Your music isn't tagged with MusicBrainz IDs
 
 #### Upload to uguu.se
 - **When to enable**: Your Navidrome instance is NOT publicly accessible from the internet
@@ -150,7 +171,7 @@ The plugin implements three Navidrome capabilities:
 
 | Service         | Usage                                                                                                |
 |-----------------|------------------------------------------------------------------------------------------------------|
-| **HTTP**        | Discord API calls (gateway discovery, external assets registration), ListenBrainz Spotify resolution |
+| **HTTP**        | Discord API calls (gateway discovery, external assets registration), Cover Art Archive lookups, ListenBrainz Spotify resolution |
 | **WebSocket**   | Persistent connection to Discord gateway                                                             |
 | **Cache**       | Sequence numbers, processed image URLs, resolved Spotify URLs                                        |
 | **Scheduler**   | Recurring heartbeats, one-time presence clearing                                                     |
@@ -177,13 +198,13 @@ Navidrome plugins are stateless - each call creates a fresh instance. This plugi
 
 ### Image Processing
 
-Discord requires images to be registered via their external assets API. The plugin:
-1. Fetches track artwork URL from Navidrome
-2. Registers it with Discord's API to get an `mp:` prefixed URL
-3. Caches the result (4 hours for track art, 48 hours for default image)
-4. Falls back to a default image if artwork is unavailable
+Discord requires images to be registered via their external assets API. The plugin resolves artwork URLs using a priority chain:
 
-**For non-public Navidrome instances**: If your server isn't publicly accessible (e.g., behind a VPN or firewall), enable the "Upload to uguu.se" option. This uploads artwork to a temporary file host so Discord can display it.
+1. **Cover Art Archive** (if enabled): HEAD request to check for artwork by MusicBrainz Release ID, with fallback to Release Group ID. The resolved `archive.org` URL is used directly.
+2. **uguu.se** (if enabled): Fetches artwork from Navidrome and uploads to temporary hosting.
+3. **Direct URL**: Uses the Navidrome artwork URL directly (requires public instance).
+
+The resolved URL is then registered with Discord's external assets API to get an `mp:` prefixed URL, which is cached (4 hours for track art, 48 hours for default image). Falls back to a default image if artwork is unavailable.
 
 ### Spotify Linking
 
@@ -206,7 +227,7 @@ Resolved URLs are cached (30 days for direct track links, 4 hours for search fal
 |----------------------------------|-------------------------------------------------------------------------------------|
 | [main.go](main.go)               | Plugin entry point, scrobbler and scheduler implementations, Spotify URL resolution |
 | [rpc.go](rpc.go)                 | Discord gateway communication, WebSocket handling, activity management              |
-| [coverart.go](coverart.go)       | Artwork URL handling and optional uguu.se image hosting                             |
+| [coverart.go](coverart.go)       | Artwork URL handling, Cover Art Archive lookups, and optional uguu.se image hosting |
 | [manifest.json](manifest.json)   | Plugin metadata and permission declarations                                         |
 | [Makefile](Makefile)             | Build automation                                                                    |
 

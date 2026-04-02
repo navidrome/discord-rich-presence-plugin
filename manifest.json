@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/navidrome/navidrome/refs/heads/master/plugins/manifest-schema.json",
   "name": "Discord Rich Presence",
   "author": "Navidrome Team",
-  "version": "1.0.0-prerelease",
+  "version": "1.0.0",
   "description": "Discord Rich Presence integration for Navidrome",
   "website": "https://github.com/navidrome/discord-rich-presence-plugin",
   "permissions": {
@@ -14,7 +14,8 @@
       "requiredHosts": [
         "discord.com",
         "uguu.se",
-        "labs.api.listenbrainz.org"
+        "labs.api.listenbrainz.org",
+        "coverartarchive.org"
       ]
     },
     "websocket": {
@@ -66,6 +67,12 @@
           "title": "Custom Activity Name Template",
           "description": "Template for the activity name. Available placeholders: {track}, {artist}, {album}",
           "default": "{artist} - {track}"
+        },
+        "caaenabled": {
+          "type": "boolean",
+          "title": "Use artwork from Cover Art Archive (for MusicBrainz-tagged music)",
+          "description": "When enabled, attempts to fetch album artwork from the Cover Art Archive using MusicBrainz IDs. Takes priority over other artwork methods.",
+          "default": false
         },
         "uguuenabled": {
           "type": "boolean",
@@ -137,6 +144,10 @@
               }
             }
           }
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/caaenabled"
         },
         {
           "type": "Control",

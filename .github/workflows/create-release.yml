@@ -7,11 +7,11 @@ on:
                 description: "Release version (e.g., 1.2.3, without the 'v' prefix)"
                 required: true
                 type: string
-            prerelease:
-                description: "Mark this as a pre-release"
+            beta:
+                description: "Beta number (1, 2, 3...). Leave empty for stable release"
                 required: false
-                type: boolean
-                default: false
+                type: string
+                default: ""
 
 permissions:
     contents: write
@@ -33,8 +33,9 @@ jobs:
             - name: Compute full version
               run: |
                   VERSION="${{ inputs.version }}"
-                  if [[ "${{ inputs.prerelease }}" == "true" ]]; then
-                    VERSION="${VERSION}-prerelease"
+                  BETA="${{ inputs.beta }}"
+                  if [[ -n "$BETA" && "$BETA" != "0" ]]; then
+                    VERSION="${VERSION}-beta-${BETA}"
                   fi
                   echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
@@ -83,6 +84,6 @@ jobs:
               with:
                   tag_name: v${{ env.VERSION }}
                   draft: true
-                  prerelease: ${{ inputs.prerelease }}
+                  prerelease: ${{ inputs.beta != '' && inputs.beta != '0' }}
                   files: discord-rich-presence.ndp
                   generate_release_notes: true
