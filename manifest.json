@@ -78,6 +78,12 @@
           "description": "When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page",
           "default": false
         },
+        "albumline":{
+          "type": "boolean",
+          "title": "Enable Album line for single track",
+          "description": "When enabled, album name will disappear if there is only one track in the album and album name is duplicated with track name",
+          "default": false
+        },
         "users": {
           "type": "array",
           "title": "User Tokens",
@@ -136,6 +142,10 @@
         {
           "type": "Control",
           "scope": "#/properties/spotifylinks"
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/albumline"
         },
         {
           "type": "Control",
