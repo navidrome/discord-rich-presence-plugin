@@ -57,9 +57,16 @@
             "Default",
             "Track",
             "Album",
-            "Artist"
+            "Artist",
+            "Custom"
           ],
           "default": "Default"
+        },
+        "activitynametemplate": {
+          "type": "string",
+          "title": "Custom Activity Name Template",
+          "description": "Template for the activity name. Available placeholders: {track}, {artist}, {album}",
+          "default": "{artist} - {track}"
         },
         "caaenabled": {
           "type": "boolean",
@@ -123,6 +130,19 @@
           "scope": "#/properties/activityname",
           "options": {
             "format": "radio"
+          }
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/activitynametemplate",
+          "rule": {
+            "effect": "SHOW",
+            "condition": {
+              "scope": "#/properties/activityname",
+              "schema": {
+                "const": "Custom"
+              }
+            }
           }
         },
         {
