@@ -125,6 +125,7 @@ var _ = Describe("discordPlugin", func() {
 			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", showLogoKey).Return("", false)
 
 			// Connect mocks (isConnected check via heartbeat)
 			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
@@ -170,6 +171,63 @@ var _ = Describe("discordPlugin", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
+		DescribeTable("show logo configuration",
+			func(configValue string, configExists bool, expectLogo bool) {
+				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
+				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
+				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", showLogoKey).Return(configValue, configExists)
+
+				// Connect mocks
+				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
+				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
+				host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+					return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+				})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
+				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
+					return strings.Contains(url, "gateway.discord.gg")
+				}), mock.Anything, "testuser").Return("testuser", nil)
+
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+				host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
+				host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
+
+				host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+				host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
+				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+				host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/art"}]`)}, nil)
+				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
+
+				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
+					Username: "testuser",
+					Position: 10,
+					Track: scrobbler.TrackInfo{
+						ID:       "track1",
+						Title:    "Test Song",
+						Artist:   "Test Artist",
+						Album:    "Test Album",
+						Duration: 180,
+					},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				if expectLogo {
+					Expect(sentPayload).To(ContainSubstring(`"small_text":"Navidrome"`))
+				} else {
+					Expect(sentPayload).NotTo(ContainSubstring(`"small_text":"Navidrome"`))
+					Expect(sentPayload).NotTo(ContainSubstring(`"small_image"`))
+				}
+			},
+			Entry("shows logo when not configured (default on)", "", false, true),
+			Entry("shows logo when explicitly set to true", "true", true, true),
+			Entry("hides logo when set to false", "false", true, false),
+		)
+
 		DescribeTable("activity name configuration",
 			func(configValue string, configExists bool, expectedName string, expectedDisplayType int) {
 				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
@@ -178,6 +236,7 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return(configValue, configExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", showLogoKey).Return("", false)
 
 				// Connect mocks
 				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))

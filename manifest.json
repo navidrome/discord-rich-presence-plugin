@@ -78,6 +78,12 @@
           "description": "When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page",
           "default": false
         },
+        "showlogo": {
+          "type": "boolean",
+          "title": "Show Navidrome logo overlay",
+          "description": "When enabled, the Navidrome logo is shown as a small overlay on the album art in the Discord status",
+          "default": true
+        },
         "users": {
           "type": "array",
           "title": "User Tokens",
@@ -136,6 +142,10 @@
         {
           "type": "Control",
           "scope": "#/properties/spotifylinks"
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/showlogo"
         },
         {
           "type": "Control",
