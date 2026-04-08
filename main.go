@@ -31,6 +31,7 @@ const (
 	spotifyLinksKey = "spotifylinks"
 	caaEnabledKey   = "caaenabled"
 	uguuEnabledKey  = "uguuenabled"
+	showLogoKey     = "showlogo"
 )
 
 const (
@@ -180,6 +181,15 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		artistSearchURL = spotifySearchURL(input.Track.Artist)
 	}
 
+	// Determine whether to show the Navidrome logo overlay (enabled by default)
+	var smallImage, smallText, smallURL string
+	showLogoOption, _ := pdk.GetConfig(showLogoKey)
+	if showLogoOption != "false" {
+		smallImage = navidromeLogoURL
+		smallText = "Navidrome"
+		smallURL = navidromeWebsiteURL
+	}
+
 	// Send activity update
 	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
 		Application:       clientID,
@@ -198,9 +208,9 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 			LargeImage: getImageURL(input.Username, input.Track),
 			LargeText:  input.Track.Album,
 			LargeURL:   spotifyURL,
-			SmallImage: navidromeLogoURL,
-			SmallText:  "Navidrome",
-			SmallURL:   navidromeWebsiteURL,
+			SmallImage: smallImage,
+			SmallText:  smallText,
+			SmallURL:   smallURL,
 		},
 	}); err != nil {
 		return fmt.Errorf("%w: failed to send activity: %v", scrobbler.ScrobblerErrorRetryLater, err)
