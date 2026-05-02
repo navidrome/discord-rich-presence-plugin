@@ -336,20 +336,20 @@ var _ = Describe("discordRPC", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("falls back to default image and clears SmallImage", func() {
-			// Track art fails (HTTP error), default image succeeds
+		It("falls back to default image and still processes SmallImage", func() {
+			// Track art fails (HTTP error), default image succeeds, small image succeeds
 			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
 			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
 
-			// First call (track art) returns 500, second call (default) succeeds
+			// First call (track art) returns 500, subsequent calls succeed
 			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 500, Body: []byte(`error`)}, nil).Once()
-			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/logo"}]`)}, nil).Once()
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/logo"}]`)}, nil)
 
 			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
 				return strings.Contains(msg, `"op":3`) &&
 					strings.Contains(msg, `"large_image":"mp:external/logo"`) &&
-					!strings.Contains(msg, `"small_image":"mp:`) &&
-					!strings.Contains(msg, `"small_text":"Navidrome"`)
+					strings.Contains(msg, `"small_image":"mp:external/logo"`) &&
+					strings.Contains(msg, `"small_text":"Navidrome"`)
 			})).Return(nil)
 
 			err := r.sendActivity("client123", "testuser", "token123", activity{

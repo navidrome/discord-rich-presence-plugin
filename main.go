@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"github.com/navidrome/navidrome/plugins/pdk/go/scheduler"
@@ -179,10 +178,18 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 
 	spotifyURL, artistSearchURL := resolveSpotifyLinks(input.Track)
 
+	rate := input.PlaybackRate
+	if rate <= 0 {
+		rate = 1.0
+	}
+
+	// Convert track-time position to wall-clock elapsed time
+	wallElapsedMs := int64(float64(input.PositionMs) / rate)
+	wallDurationMs := int64(float64(int64(input.Track.Duration)*1000) / rate)
+
 	ts := activityTimestamps{
-		Start: input.Timestamp*1000 - input.PositionMs,
-		// Adjust end time for playback rate (e.g. 2x speed audiobooks finish in half the wall-clock time)
-		End: input.Timestamp*1000 - input.PositionMs + int64(float64(int64(input.Track.Duration)*1000)/input.PlaybackRate),
+		Start: input.Timestamp*1000 - wallElapsedMs,
+		End:   input.Timestamp*1000 - wallElapsedMs + wallDurationMs,
 	}
 	assets := activityAssets{
 		LargeImage: getImageURL(input.Username, input.Track),
@@ -191,12 +198,12 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 	}
 
 	if paused {
-		ts = activityTimestamps{Start: time.Now().UnixMilli()}
+		ts = activityTimestamps{Start: input.Timestamp * 1000}
 		assets.SmallImage = pauseIconURL
 		assets.SmallText = "Paused"
 	}
 
-	return rpc.sendActivity(clientID, input.Username, userToken, activity{
+	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
 		Application:       clientID,
 		Name:              activityName,
 		Type:              2,
@@ -207,18 +214,23 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		StatusDisplayType: statusDisplayType,
 		Timestamps:        ts,
 		Assets:            assets,
-	})
+	}); err != nil {
+		return fmt.Errorf("%w: failed to send activity: %v", scrobbler.ScrobblerErrorRetryLater, err)
+	}
+	return nil
 }
 
 func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) error {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Clearing presence for user %s", input.Username))
 
-	if err := rpc.clearActivity(input.Username); err != nil {
-		return fmt.Errorf("failed to clear activity: %w", err)
-	}
+	clearErr := rpc.clearActivity(input.Username)
+	disconnectErr := rpc.disconnect(input.Username)
 
-	if err := rpc.disconnect(input.Username); err != nil {
-		return fmt.Errorf("failed to disconnect from Discord: %w", err)
+	if clearErr != nil {
+		return fmt.Errorf("failed to clear activity: %w", clearErr)
+	}
+	if disconnectErr != nil {
+		return fmt.Errorf("failed to disconnect from Discord: %w", disconnectErr)
 	}
 	return nil
 }
@@ -227,6 +239,9 @@ func connectUser(username string) (clientID, token string, err error) {
 	clientID, users, err := getConfig()
 	if err != nil {
 		return "", "", fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
+	}
+	if clientID == "" {
+		return "", "", fmt.Errorf("%w: missing ClientID in configuration", scrobbler.ScrobblerErrorRetryLater)
 	}
 
 	token, authorized := users[username]

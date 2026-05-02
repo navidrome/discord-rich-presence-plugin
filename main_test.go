@@ -209,11 +209,13 @@ var _ = Describe("discordPlugin", func() {
 				err := plugin.PlaybackReport(req)
 				Expect(err).ToNot(HaveOccurred())
 
-				// With 2x speed, 180s track -> 90s effective duration = 90000ms
-				// startTime = 1714600000*1000 - 10000 = 1714599990000
-				// endTime = 1714599990000 + 90000 = 1714600080000
-				Expect(sentPayload).To(ContainSubstring(`"start":1714599990000`))
-				Expect(sentPayload).To(ContainSubstring(`"end":1714600080000`))
+				// With 2x speed: position and duration are both scaled by rate
+				// wallElapsed = 10000ms / 2.0 = 5000ms
+				// startTime = 1714600000*1000 - 5000 = 1714599995000
+				// wallDuration = 180*1000 / 2.0 = 90000ms
+				// endTime = 1714599995000 + 90000 = 1714600085000
+				Expect(sentPayload).To(ContainSubstring(`"start":1714599995000`))
+				Expect(sentPayload).To(ContainSubstring(`"end":1714600085000`))
 			})
 		})
 
@@ -233,7 +235,8 @@ var _ = Describe("discordPlugin", func() {
 
 				Expect(sentPayload).To(ContainSubstring(`"small_text":"Paused"`))
 				Expect(sentPayload).ToNot(ContainSubstring(`"end":`))
-				Expect(sentPayload).To(ContainSubstring(`"start":`))
+				// Paused start = Timestamp * 1000 = 1714600000000
+				Expect(sentPayload).To(ContainSubstring(`"start":1714600000000`))
 			})
 		})
 

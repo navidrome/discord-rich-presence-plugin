@@ -234,7 +234,6 @@ func (r *discordRPC) sendActivity(clientID, username, token string, data activit
 	data.Assets.SmallURL = truncateURL(data.Assets.SmallURL)
 
 	// Try track artwork first, fall back to Navidrome logo
-	usingDefaultImage := false
 	processedImage, err := r.processImage(data.Assets.LargeImage, clientID, token, imageCacheTTL)
 	if err != nil {
 		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to process track image for user %s: %v, falling back to default", username, err))
@@ -244,14 +243,12 @@ func (r *discordRPC) sendActivity(clientID, username, token string, data activit
 			data.Assets.LargeImage = ""
 		} else {
 			data.Assets.LargeImage = processedImage
-			usingDefaultImage = true
 		}
 	} else {
 		data.Assets.LargeImage = processedImage
 	}
 
-	// Only show SmallImage (Navidrome logo overlay) when LargeImage is actual track artwork
-	if usingDefaultImage || data.Assets.LargeImage == "" {
+	if data.Assets.LargeImage == "" {
 		data.Assets.SmallImage = ""
 		data.Assets.SmallText = ""
 	} else if data.Assets.SmallImage != "" {
