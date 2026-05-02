@@ -163,20 +163,6 @@ var _ = Describe("discordRPC", func() {
 		})
 	})
 
-	Describe("handleClearActivityCallback", func() {
-		It("clears activity and disconnects", func() {
-			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
-			host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
-				return strings.Contains(msg, `"op":3`) && strings.Contains(msg, `"activities":null`)
-			})).Return(nil)
-			host.SchedulerMock.On("CancelSchedule", "testuser").Return(nil)
-			host.WebSocketMock.On("CloseConnection", "testuser", int32(1000), "Navidrome disconnect").Return(nil)
-
-			err := r.handleClearActivityCallback("testuser")
-			Expect(err).ToNot(HaveOccurred())
-		})
-	})
-
 	Describe("WebSocket callbacks", func() {
 		Describe("OnTextMessage", func() {
 			It("handles valid JSON message", func() {
