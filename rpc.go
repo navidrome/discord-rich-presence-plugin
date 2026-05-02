@@ -88,12 +88,6 @@ type activity struct {
 	StatusDisplayType int                `json:"status_display_type"`
 	Timestamps        activityTimestamps `json:"timestamps"`
 	Assets            activityAssets     `json:"assets"`
-	Buttons           []string           `json:"buttons,omitempty"`
-	Metadata          *activityMetadata  `json:"metadata,omitempty"`
-}
-
-type activityMetadata struct {
-	ButtonURLs []string `json:"button_urls,omitempty"`
 }
 
 type activityTimestamps struct {
