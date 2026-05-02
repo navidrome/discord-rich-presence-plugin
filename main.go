@@ -40,6 +40,14 @@ const (
 	pauseIconURL = "https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/refs/heads/main/assets/pause.png"
 )
 
+// Playback states from PlaybackReportRequest.State
+const (
+	statePlaying = "playing"
+	statePaused  = "paused"
+	stateStopped = "stopped"
+	stateExpired = "expired"
+)
+
 // Activity name display options
 const (
 	activityNameDefault = "Default"
@@ -140,59 +148,45 @@ func (p *discordPlugin) Scrobble(_ scrobbler.ScrobbleRequest) error {
 // PlaybackReport handles playback state reports from Navidrome.
 func (p *discordPlugin) PlaybackReport(input scrobbler.PlaybackReportRequest) error {
 	switch input.State {
-	case "playing":
-		return p.handlePlaying(input)
-	case "paused":
-		return p.handlePaused(input)
-	case "stopped", "expired":
+	case statePlaying:
+		return p.handlePlayingOrPaused(input)
+	case statePaused:
+		return p.handlePlayingOrPaused(input)
+	case stateStopped, stateExpired:
 		return p.handleStopped(input)
 	default:
 		return nil
 	}
 }
 
-func (p *discordPlugin) handlePlaying(input scrobbler.PlaybackReportRequest) error {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("Setting presence for user %s, track: %s", input.Username, input.Track.Title))
+func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequest) error {
+	paused := input.State == statePaused
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("Setting presence for user %s, track: %s (paused=%v)", input.Username, input.Track.Title, paused))
 
-	clientID, users, err := getConfig()
+	clientID, userToken, err := connectUser(input.Username)
 	if err != nil {
-		return fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
+		return err
 	}
 
-	userToken, authorized := users[input.Username]
-	if !authorized {
-		return fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, input.Username)
+	activityName, statusDisplayType := resolveActivityName(input.Track)
+
+	spotifyURL, artistSearchURL := resolveSpotifyLinks(input.Track)
+
+	ts := activityTimestamps{
+		Start: input.Timestamp*1000 - input.PositionMs,
+		// Adjust end time for playback rate (e.g. 2x speed audiobooks finish in half the wall-clock time)
+		End: input.Timestamp*1000 - input.PositionMs + int64(float64(int64(input.Track.Duration)*1000)/input.PlaybackRate),
+	}
+	assets := activityAssets{
+		LargeImage: getImageURL(input.Username, input.Track),
+		LargeText:  input.Track.Album,
+		LargeURL:   spotifyURL,
 	}
 
-	if err := rpc.connect(input.Username, userToken); err != nil {
-		return fmt.Errorf("%w: failed to connect to Discord: %v", scrobbler.ScrobblerErrorRetryLater, err)
-	}
-
-	startTime := input.Timestamp*1000 - input.PositionMs
-	// Adjust end time for playback rate (e.g. 2x speed audiobooks finish in half the wall-clock time)
-	effectiveDuration := int64(float64(int64(input.Track.Duration)*1000) / input.PlaybackRate)
-	endTime := startTime + effectiveDuration
-
-	activityName := "Navidrome"
-	statusDisplayType := statusDisplayDetails
-	activityNameOption, _ := pdk.GetConfig(activityNameKey)
-	switch activityNameOption {
-	case activityNameTrack:
-		activityName = input.Track.Title
-		statusDisplayType = statusDisplayName
-	case activityNameAlbum:
-		activityName = input.Track.Album
-		statusDisplayType = statusDisplayName
-	case activityNameArtist:
-		activityName = input.Track.Artist
-		statusDisplayType = statusDisplayName
-	}
-
-	var spotifyURL, artistSearchURL string
-	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
-	if spotifyLinksOption == "true" {
-		spotifyURL = resolveSpotifyURL(input.Track)
-		artistSearchURL = spotifySearchURL(input.Track.Artist)
+	if paused {
+		ts = activityTimestamps{Start: time.Now().UnixMilli() - input.PositionMs}
+		assets.SmallImage = pauseIconURL
+		assets.SmallText = "Paused"
 	}
 
 	return rpc.sendActivity(clientID, input.Username, userToken, activity{
@@ -204,78 +198,8 @@ func (p *discordPlugin) handlePlaying(input scrobbler.PlaybackReportRequest) err
 		State:             input.Track.Artist,
 		StateURL:          artistSearchURL,
 		StatusDisplayType: statusDisplayType,
-		Timestamps: activityTimestamps{
-			Start: startTime,
-			End:   endTime,
-		},
-		Assets: activityAssets{
-			LargeImage: getImageURL(input.Username, input.Track),
-			LargeText:  input.Track.Album,
-			LargeURL:   spotifyURL,
-		},
-	})
-}
-
-func (p *discordPlugin) handlePaused(input scrobbler.PlaybackReportRequest) error {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("Pausing presence for user %s, track: %s", input.Username, input.Track.Title))
-
-	clientID, users, err := getConfig()
-	if err != nil {
-		return fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
-	}
-
-	userToken, authorized := users[input.Username]
-	if !authorized {
-		return fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, input.Username)
-	}
-
-	if err := rpc.connect(input.Username, userToken); err != nil {
-		return fmt.Errorf("%w: failed to connect to Discord: %v", scrobbler.ScrobblerErrorRetryLater, err)
-	}
-
-	startTime := time.Now().UnixMilli() - input.PositionMs
-
-	activityName := "Navidrome"
-	statusDisplayType := statusDisplayDetails
-	activityNameOption, _ := pdk.GetConfig(activityNameKey)
-	switch activityNameOption {
-	case activityNameTrack:
-		activityName = input.Track.Title
-		statusDisplayType = statusDisplayName
-	case activityNameAlbum:
-		activityName = input.Track.Album
-		statusDisplayType = statusDisplayName
-	case activityNameArtist:
-		activityName = input.Track.Artist
-		statusDisplayType = statusDisplayName
-	}
-
-	var spotifyURL, artistSearchURL string
-	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
-	if spotifyLinksOption == "true" {
-		spotifyURL = resolveSpotifyURL(input.Track)
-		artistSearchURL = spotifySearchURL(input.Track.Artist)
-	}
-
-	return rpc.sendActivity(clientID, input.Username, userToken, activity{
-		Application:       clientID,
-		Name:              activityName,
-		Type:              2,
-		Details:           input.Track.Title,
-		DetailsURL:        spotifyURL,
-		State:             input.Track.Artist,
-		StateURL:          artistSearchURL,
-		StatusDisplayType: statusDisplayType,
-		Timestamps: activityTimestamps{
-			Start: startTime,
-		},
-		Assets: activityAssets{
-			LargeImage: getImageURL(input.Username, input.Track),
-			LargeText:  input.Track.Album,
-			LargeURL:   spotifyURL,
-			SmallImage: pauseIconURL,
-			SmallText:  "Paused",
-		},
+		Timestamps:        ts,
+		Assets:            assets,
 	})
 }
 
@@ -290,6 +214,45 @@ func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) err
 		return fmt.Errorf("failed to disconnect from Discord: %w", err)
 	}
 	return nil
+}
+
+func connectUser(username string) (clientID, token string, err error) {
+	clientID, users, err := getConfig()
+	if err != nil {
+		return "", "", fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
+	}
+
+	token, authorized := users[username]
+	if !authorized {
+		return "", "", fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, username)
+	}
+
+	if err := rpc.connect(username, token); err != nil {
+		return "", "", fmt.Errorf("%w: failed to connect to Discord: %v", scrobbler.ScrobblerErrorRetryLater, err)
+	}
+	return clientID, token, nil
+}
+
+func resolveActivityName(track scrobbler.TrackInfo) (string, int) {
+	activityNameOption, _ := pdk.GetConfig(activityNameKey)
+	switch activityNameOption {
+	case activityNameTrack:
+		return track.Title, statusDisplayName
+	case activityNameAlbum:
+		return track.Album, statusDisplayName
+	case activityNameArtist:
+		return track.Artist, statusDisplayName
+	default:
+		return "Navidrome", statusDisplayDetails
+	}
+}
+
+func resolveSpotifyLinks(track scrobbler.TrackInfo) (string, string) {
+	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
+	if spotifyLinksOption != "true" {
+		return "", ""
+	}
+	return resolveSpotifyURL(track), spotifySearchURL(track.Artist)
 }
 
 // ============================================================================
