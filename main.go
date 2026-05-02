@@ -184,7 +184,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 	}
 
 	if paused {
-		ts = activityTimestamps{Start: time.Now().UnixMilli() - input.PositionMs}
+		ts = activityTimestamps{Start: time.Now().UnixMilli()}
 		assets.SmallImage = pauseIconURL
 		assets.SmallText = "Paused"
 	}
