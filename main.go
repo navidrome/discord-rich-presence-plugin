@@ -200,7 +200,8 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		StatusDisplayType: statusDisplayType,
 		Timestamps:        ts,
 		Assets:            assets,
-		Buttons:           []activityButton{{Label: "Powered by Navidrome", URL: navidromeWebsiteURL}},
+		Buttons:           []string{"Powered by Navidrome"},
+		Metadata:          &activityMetadata{ButtonURLs: []string{navidromeWebsiteURL}},
 	})
 }
 
