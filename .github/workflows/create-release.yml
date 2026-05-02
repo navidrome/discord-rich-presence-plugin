@@ -68,7 +68,7 @@ jobs:
                   git add manifest.json
                   git commit --allow-empty -m "Release v${VERSION}"
                   git tag "v${VERSION}"
-                  git push origin main "v${VERSION}"
+                  git push origin HEAD "v${VERSION}"
 
             - name: Install TinyGo
               run: |
