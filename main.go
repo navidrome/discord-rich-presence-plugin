@@ -37,7 +37,7 @@ const (
 	// navidromeLogoURL is used as fallback large image when track artwork is unavailable.
 	navidromeLogoURL = "https://raw.githubusercontent.com/navidrome/website/refs/heads/master/assets/icons/logo.webp"
 
-	pauseIconURL = "https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/refs/heads/main/assets/pause.png"
+	pauseIconURL = "https://github.com/navidrome/discord-rich-presence-plugin/blob/800bfacfb8e85c33692373b10ddbd27388f262d2/assets/pause.png"
 )
 
 // Playback states from PlaybackReportRequest.State
