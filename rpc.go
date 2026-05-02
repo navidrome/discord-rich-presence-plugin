@@ -100,7 +100,7 @@ type activityTimestamps struct {
 
 type activityAssets struct {
 	LargeImage string `json:"large_image"`
-	LargeText  string `json:"large_text"`
+	LargeText  string `json:"large_text,omitempty"`
 	LargeURL   string `json:"large_url,omitempty"`
 	SmallImage string `json:"small_image,omitempty"`
 	SmallText  string `json:"small_text,omitempty"`

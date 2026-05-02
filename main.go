@@ -31,6 +31,7 @@ const (
 	spotifyLinksKey = "spotifylinks"
 	caaEnabledKey   = "caaenabled"
 	uguuEnabledKey  = "uguuenabled"
+	albumLineKey    = "albumline"
 )
 
 const (
@@ -111,6 +112,61 @@ func getConfig() (clientID string, users map[string]string, err error) {
 	return clientID, users, nil
 }
 
+func resolveAlbumLine(username string, input scrobbler.TrackInfo, enable bool) string {
+	albumLine := input.Album
+	if !enable {
+		return albumLine
+	}
+	songResponse, err := host.SubsonicAPICall("/getSong?u=" + username + "&id=" + input.ID)
+	if err != nil {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("getSong failed: %s", songResponse))
+		return albumLine
+	}
+
+	var songData map[string]interface{}
+	if err := json.Unmarshal([]byte(songResponse), &songData); err != nil {
+		pdk.Log(pdk.LogDebug, fmt.Sprintf("Failed to parse getSong response: %s", err))
+		return albumLine
+	}
+	subsonicResponse := songData["subsonic-response"].(map[string]interface{})
+	song := subsonicResponse["song"].(map[string]interface{})
+
+	albumID := song["albumId"].(string)
+
+	//Refind the album
+	if albumID == "" {
+		// Normally never ends up here because the response is always 200 OK, but just in case
+		pdk.Log(pdk.LogDebug, "No albumId found in song data")
+		return albumLine
+	}
+	//Cache the album info to avoid multiple calls for the same album
+	cacheKey := "album.songcount." + albumID
+	count, exists, _ := host.CacheGetInt(cacheKey)
+	if !exists {
+		albumResponse, err := host.SubsonicAPICall("/getAlbum?u=" + username + "&id=" + albumID)
+		if err != nil {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("Failed to call getAlbum API: %s", err))
+			return albumLine
+		}
+
+		var albumData map[string]interface{}
+		if err := json.Unmarshal([]byte(albumResponse), &albumData); err != nil {
+			pdk.Log(pdk.LogDebug, fmt.Sprintf("Failed to parse getAlbum response: %s", err))
+			return albumLine
+		}
+		subsonicAlbumResponse := albumData["subsonic-response"].(map[string]interface{})
+		album := subsonicAlbumResponse["album"].(map[string]interface{})
+		if sc, ok := album["songCount"].(float64); ok {
+			count = int64(sc)
+			host.CacheSetInt(cacheKey, count, 3600) // Cache for 1 hour
+		}
+	}
+	if count == 1 && albumLine == input.Title {
+		albumLine = ""
+	}
+	return albumLine
+}
+
 // ============================================================================
 // Scrobbler Implementation
 // ============================================================================
@@ -172,6 +228,10 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		statusDisplayType = statusDisplayName
 	}
 
+	// Resolve Album Line if enabled
+	albumLineOption, _ := pdk.GetConfig(albumLineKey)
+	albumText := resolveAlbumLine(input.Username, input.Track, albumLineOption == "true")
+
 	// Resolve Spotify URLs if enabled
 	var spotifyURL, artistSearchURL string
 	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
@@ -196,7 +256,7 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		},
 		Assets: activityAssets{
 			LargeImage: getImageURL(input.Username, input.Track),
-			LargeText:  input.Track.Album,
+			LargeText:  albumText,
 			LargeURL:   spotifyURL,
 			SmallImage: navidromeLogoURL,
 			SmallText:  "Navidrome",
