@@ -13,10 +13,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/navidrome/navidrome/plugins/pdk/go/host"
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"github.com/navidrome/navidrome/plugins/pdk/go/scheduler"
 	"github.com/navidrome/navidrome/plugins/pdk/go/scrobbler"
@@ -36,9 +34,10 @@ const (
 const (
 	navidromeWebsiteURL = "https://www.navidrome.org"
 
-	// navidromeLogoURL is the small overlay image shown in the bottom-right of the album art.
-	// The file is stored in the plugins' GitHub repository so Discord can fetch it as an external asset.
+	// navidromeLogoURL is used as fallback large image when track artwork is unavailable.
 	navidromeLogoURL = "https://raw.githubusercontent.com/navidrome/website/refs/heads/master/assets/icons/logo.webp"
+
+	pauseIconURL = "https://raw.githubusercontent.com/navidrome/discord-rich-presence-plugin/refs/heads/main/assets/pause.png"
 )
 
 // Activity name display options
@@ -127,36 +126,53 @@ func (p *discordPlugin) IsAuthorized(input scrobbler.IsAuthorizedRequest) (bool,
 	return authorized, nil
 }
 
-// NowPlaying sends a now playing notification to Discord.
-func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
+// NowPlaying is a no-op — playback state is handled by PlaybackReport.
+func (p *discordPlugin) NowPlaying(_ scrobbler.NowPlayingRequest) error {
+	return nil
+}
+
+// Scrobble handles scrobble requests (no-op for Discord).
+func (p *discordPlugin) Scrobble(_ scrobbler.ScrobbleRequest) error {
+	// Discord Rich Presence doesn't need scrobble events
+	return nil
+}
+
+// PlaybackReport handles playback state reports from Navidrome.
+func (p *discordPlugin) PlaybackReport(input scrobbler.PlaybackReportRequest) error {
+	switch input.State {
+	case "playing":
+		return p.handlePlaying(input)
+	case "paused":
+		return p.handlePaused(input)
+	case "stopped", "expired":
+		return p.handleStopped(input)
+	default:
+		return nil
+	}
+}
+
+func (p *discordPlugin) handlePlaying(input scrobbler.PlaybackReportRequest) error {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Setting presence for user %s, track: %s", input.Username, input.Track.Title))
 
-	// Load configuration
 	clientID, users, err := getConfig()
 	if err != nil {
 		return fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
 	}
 
-	// Check authorization
 	userToken, authorized := users[input.Username]
 	if !authorized {
 		return fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, input.Username)
 	}
 
-	// Connect to Discord
 	if err := rpc.connect(input.Username, userToken); err != nil {
 		return fmt.Errorf("%w: failed to connect to Discord: %v", scrobbler.ScrobblerErrorRetryLater, err)
 	}
 
-	// Cancel any existing completion schedule
-	_ = host.SchedulerCancelSchedule(fmt.Sprintf("%s-clear", input.Username))
+	startTime := input.Timestamp*1000 - input.PositionMs
+	// Adjust end time for playback rate (e.g. 2x speed audiobooks finish in half the wall-clock time)
+	effectiveDuration := int64(float64(int64(input.Track.Duration)*1000) / input.PlaybackRate)
+	endTime := startTime + effectiveDuration
 
-	// Calculate timestamps
-	now := time.Now().Unix()
-	startTime := (now - int64(input.Position)) * 1000
-	endTime := startTime + int64(input.Track.Duration)*1000
-
-	// Resolve the activity name based on configuration
 	activityName := "Navidrome"
 	statusDisplayType := statusDisplayDetails
 	activityNameOption, _ := pdk.GetConfig(activityNameKey)
@@ -172,7 +188,6 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		statusDisplayType = statusDisplayName
 	}
 
-	// Resolve Spotify URLs if enabled
 	var spotifyURL, artistSearchURL string
 	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
 	if spotifyLinksOption == "true" {
@@ -180,11 +195,10 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 		artistSearchURL = spotifySearchURL(input.Track.Artist)
 	}
 
-	// Send activity update
-	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
+	return rpc.sendActivity(clientID, input.Username, userToken, activity{
 		Application:       clientID,
 		Name:              activityName,
-		Type:              2, // Listening
+		Type:              2,
 		Details:           input.Track.Title,
 		DetailsURL:        spotifyURL,
 		State:             input.Track.Artist,
@@ -198,27 +212,83 @@ func (p *discordPlugin) NowPlaying(input scrobbler.NowPlayingRequest) error {
 			LargeImage: getImageURL(input.Username, input.Track),
 			LargeText:  input.Track.Album,
 			LargeURL:   spotifyURL,
-			SmallImage: navidromeLogoURL,
-			SmallText:  "Navidrome",
-			SmallURL:   navidromeWebsiteURL,
 		},
-	}); err != nil {
-		return fmt.Errorf("%w: failed to send activity: %v", scrobbler.ScrobblerErrorRetryLater, err)
-	}
-
-	// Schedule a timer to clear the activity after the track completes
-	remainingSeconds := int32(input.Track.Duration) - input.Position + 5
-	_, err = host.SchedulerScheduleOneTime(remainingSeconds, payloadClearActivity, fmt.Sprintf("%s-clear", input.Username))
-	if err != nil {
-		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to schedule completion timer: %v", err))
-	}
-
-	return nil
+	})
 }
 
-// Scrobble handles scrobble requests (no-op for Discord).
-func (p *discordPlugin) Scrobble(_ scrobbler.ScrobbleRequest) error {
-	// Discord Rich Presence doesn't need scrobble events
+func (p *discordPlugin) handlePaused(input scrobbler.PlaybackReportRequest) error {
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("Pausing presence for user %s, track: %s", input.Username, input.Track.Title))
+
+	clientID, users, err := getConfig()
+	if err != nil {
+		return fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
+	}
+
+	userToken, authorized := users[input.Username]
+	if !authorized {
+		return fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, input.Username)
+	}
+
+	if err := rpc.connect(input.Username, userToken); err != nil {
+		return fmt.Errorf("%w: failed to connect to Discord: %v", scrobbler.ScrobblerErrorRetryLater, err)
+	}
+
+	startTime := time.Now().UnixMilli() - input.PositionMs
+
+	activityName := "Navidrome"
+	statusDisplayType := statusDisplayDetails
+	activityNameOption, _ := pdk.GetConfig(activityNameKey)
+	switch activityNameOption {
+	case activityNameTrack:
+		activityName = input.Track.Title
+		statusDisplayType = statusDisplayName
+	case activityNameAlbum:
+		activityName = input.Track.Album
+		statusDisplayType = statusDisplayName
+	case activityNameArtist:
+		activityName = input.Track.Artist
+		statusDisplayType = statusDisplayName
+	}
+
+	var spotifyURL, artistSearchURL string
+	spotifyLinksOption, _ := pdk.GetConfig(spotifyLinksKey)
+	if spotifyLinksOption == "true" {
+		spotifyURL = resolveSpotifyURL(input.Track)
+		artistSearchURL = spotifySearchURL(input.Track.Artist)
+	}
+
+	return rpc.sendActivity(clientID, input.Username, userToken, activity{
+		Application:       clientID,
+		Name:              activityName,
+		Type:              2,
+		Details:           input.Track.Title,
+		DetailsURL:        spotifyURL,
+		State:             input.Track.Artist,
+		StateURL:          artistSearchURL,
+		StatusDisplayType: statusDisplayType,
+		Timestamps: activityTimestamps{
+			Start: startTime,
+		},
+		Assets: activityAssets{
+			LargeImage: getImageURL(input.Username, input.Track),
+			LargeText:  input.Track.Album,
+			LargeURL:   spotifyURL,
+			SmallImage: pauseIconURL,
+			SmallText:  "Paused",
+		},
+	})
+}
+
+func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) error {
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("Clearing presence for user %s", input.Username))
+
+	if err := rpc.clearActivity(input.Username); err != nil {
+		return fmt.Errorf("failed to clear activity: %w", err)
+	}
+
+	if err := rpc.disconnect(input.Username); err != nil {
+		return fmt.Errorf("failed to disconnect from Discord: %w", err)
+	}
 	return nil
 }
 
@@ -230,21 +300,11 @@ func (p *discordPlugin) Scrobble(_ scrobbler.ScrobbleRequest) error {
 func (p *discordPlugin) OnCallback(input scheduler.SchedulerCallbackRequest) error {
 	pdk.Log(pdk.LogDebug, fmt.Sprintf("Scheduler callback: id=%s, payload=%s, recurring=%v", input.ScheduleID, input.Payload, input.IsRecurring))
 
-	// Route based on payload
 	switch input.Payload {
 	case payloadHeartbeat:
-		// Heartbeat callback - scheduleId is the username
 		if err := rpc.handleHeartbeatCallback(input.ScheduleID); err != nil {
 			return err
 		}
-
-	case payloadClearActivity:
-		// Clear activity callback - scheduleId is "username-clear"
-		username := strings.TrimSuffix(input.ScheduleID, "-clear")
-		if err := rpc.handleClearActivityCallback(username); err != nil {
-			return err
-		}
-
 	default:
 		pdk.Log(pdk.LogWarn, fmt.Sprintf("Unknown scheduler callback payload: %s", input.Payload))
 	}
