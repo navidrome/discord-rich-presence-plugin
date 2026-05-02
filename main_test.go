@@ -172,7 +172,7 @@ var _ = Describe("discordPlugin", func() {
 
 				err := plugin.PlaybackReport(baseRequest("playing"))
 				Expect(err).To(HaveOccurred())
-				Expect(errors.Is(err, scrobbler.ScrobblerErrorNotAuthorized)).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("not authorized"))
 			})
 
 			It("sends activity with running timestamps and no small overlay", func() {

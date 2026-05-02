@@ -203,7 +203,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		assets.SmallText = "Paused"
 	}
 
-	if err := rpc.sendActivity(clientID, input.Username, userToken, activity{
+	return rpc.sendActivity(clientID, input.Username, userToken, activity{
 		Application:       clientID,
 		Name:              activityName,
 		Type:              2,
@@ -214,10 +214,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		StatusDisplayType: statusDisplayType,
 		Timestamps:        ts,
 		Assets:            assets,
-	}); err != nil {
-		return fmt.Errorf("%w: failed to send activity: %v", scrobbler.ScrobblerErrorRetryLater, err)
-	}
-	return nil
+	})
 }
 
 func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) error {
@@ -238,10 +235,10 @@ func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) err
 func connectUser(username string) (clientID, token string, err error) {
 	clientID, users, err := getConfig()
 	if err != nil {
-		return "", "", fmt.Errorf("%w: failed to get config: %v", scrobbler.ScrobblerErrorRetryLater, err)
+		return "", "", fmt.Errorf("failed to get config: %w", err)
 	}
 	if clientID == "" {
-		return "", "", fmt.Errorf("%w: missing ClientID in configuration", scrobbler.ScrobblerErrorRetryLater)
+		return "", "", fmt.Errorf("missing ClientID in configuration")
 	}
 
 	token, authorized := users[username]
@@ -250,7 +247,7 @@ func connectUser(username string) (clientID, token string, err error) {
 	}
 
 	if err := rpc.connect(username, token); err != nil {
-		return "", "", fmt.Errorf("%w: failed to connect to Discord: %v", scrobbler.ScrobblerErrorRetryLater, err)
+		return "", "", fmt.Errorf("failed to connect to Discord: %w", err)
 	}
 	return clientID, token, nil
 }
