@@ -101,64 +101,18 @@ var _ = Describe("discordPlugin", func() {
 		})
 	})
 
-	Describe("NowPlaying", func() {
+	Describe("PlaybackReport", func() {
 		BeforeEach(func() {
 			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
 		})
 
-		It("returns not authorized error when user not in config", func() {
-			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
-			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"otheruser","token":"token"}]`, true)
-
-			err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
-				Username: "testuser",
-				Track:    scrobbler.TrackInfo{Title: "Test Song"},
-			})
-			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, scrobbler.ScrobblerErrorNotAuthorized)).To(BeTrue())
-		})
-
-		It("successfully sends now playing update", func() {
-			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
-			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
-			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
-			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
-			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
-			pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
-
-			// Connect mocks (isConnected check via heartbeat)
-			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
-
-			// Mock HTTP GET request for gateway discovery
-			gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
-				return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
-			})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
-
-			// Mock WebSocket connection
-			host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
-				return strings.Contains(url, "gateway.discord.gg")
-			}), mock.Anything, "testuser").Return("testuser", nil)
-			host.WebSocketMock.On("SendText", "testuser", mock.Anything).Return(nil)
-			host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
-
-			// Cancel existing clear schedule (may or may not exist)
-			host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
-
-			// Cache mocks (Discord image processing)
-			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
-			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
-			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
-
-			// Mock HTTP POST requests (Discord external assets API)
-			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
-
-			// Schedule clear activity callback
-			host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
-
-			err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
-				Username: "testuser",
-				Position: 10,
+		baseRequest := func(state string) scrobbler.PlaybackReportRequest {
+			return scrobbler.PlaybackReportRequest{
+				Username:     "testuser",
+				State:        state,
+				PositionMs:   10000,
+				PlaybackRate: 1.0,
+				Timestamp:    1714600000,
 				Track: scrobbler.TrackInfo{
 					ID:       "track1",
 					Title:    "Test Song",
@@ -166,8 +120,150 @@ var _ = Describe("discordPlugin", func() {
 					Album:    "Test Album",
 					Duration: 180,
 				},
+			}
+		}
+
+		setupConnectMocks := func() {
+			host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
+			gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
+			host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
+				return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
+			})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
+			host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
+				return strings.Contains(url, "gateway.discord.gg")
+			}), mock.Anything, "testuser").Return("testuser", nil)
+			host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
+		}
+
+		setupConfigMocks := func() {
+			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
+			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
+			pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+		}
+
+		setupImageMocks := func() {
+			host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
+			host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
+			host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
+			host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`[{"external_asset_path":"external/art"}]`)}, nil)
+		}
+
+		Context("starting state", func() {
+			It("is a no-op", func() {
+				err := plugin.PlaybackReport(baseRequest("starting"))
+				Expect(err).ToNot(HaveOccurred())
 			})
-			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Context("unknown state", func() {
+			It("is a no-op", func() {
+				err := plugin.PlaybackReport(baseRequest("unknown"))
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		Context("playing state", func() {
+			It("returns not authorized error when user not in config", func() {
+				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
+				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"otheruser","token":"token"}]`, true)
+
+				err := plugin.PlaybackReport(baseRequest("playing"))
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("not authorized"))
+			})
+
+			It("sends activity with running timestamps and no small overlay", func() {
+				setupConfigMocks()
+				setupConnectMocks()
+				setupImageMocks()
+
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+
+				err := plugin.PlaybackReport(baseRequest("playing"))
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(sentPayload).ToNot(ContainSubstring(`"small_image"`))
+				Expect(sentPayload).To(ContainSubstring(`"start":`))
+				Expect(sentPayload).To(ContainSubstring(`"end":`))
+			})
+
+			It("adjusts end time for non-1.0 playback rate", func() {
+				setupConfigMocks()
+				setupConnectMocks()
+				setupImageMocks()
+
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+
+				req := baseRequest("playing")
+				req.PlaybackRate = 2.0
+
+				err := plugin.PlaybackReport(req)
+				Expect(err).ToNot(HaveOccurred())
+
+				// With 2x speed: position and duration are both scaled by rate
+				// wallElapsed = 10000ms / 2.0 = 5000ms
+				// startTime = 1714600000*1000 - 5000 = 1714599995000
+				// wallDuration = 180*1000 / 2.0 = 90000ms
+				// endTime = 1714599995000 + 90000 = 1714600085000
+				Expect(sentPayload).To(ContainSubstring(`"start":1714599995000`))
+				Expect(sentPayload).To(ContainSubstring(`"end":1714600085000`))
+			})
+		})
+
+		Context("paused state", func() {
+			It("sends activity with frozen timestamps and pause icon overlay", func() {
+				setupConfigMocks()
+				setupConnectMocks()
+				setupImageMocks()
+
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+
+				err := plugin.PlaybackReport(baseRequest("paused"))
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(sentPayload).To(ContainSubstring(`"small_text":"Paused"`))
+				Expect(sentPayload).ToNot(ContainSubstring(`"end":`))
+				// Paused start = Timestamp * 1000 = 1714600000000
+				Expect(sentPayload).To(ContainSubstring(`"start":1714600000000`))
+			})
+		})
+
+		Context("stopped state", func() {
+			It("clears activity and disconnects", func() {
+				host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
+					return strings.Contains(msg, `"op":3`) && strings.Contains(msg, `"activities":null`)
+				})).Return(nil)
+				host.SchedulerMock.On("CancelSchedule", "testuser").Return(nil)
+				host.WebSocketMock.On("CloseConnection", "testuser", int32(1000), "Navidrome disconnect").Return(nil)
+
+				err := plugin.PlaybackReport(baseRequest("stopped"))
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+
+		Context("expired state", func() {
+			It("clears activity and disconnects (same as stopped)", func() {
+				host.WebSocketMock.On("SendText", "testuser", mock.MatchedBy(func(msg string) bool {
+					return strings.Contains(msg, `"op":3`) && strings.Contains(msg, `"activities":null`)
+				})).Return(nil)
+				host.SchedulerMock.On("CancelSchedule", "testuser").Return(nil)
+				host.WebSocketMock.On("CloseConnection", "testuser", int32(1000), "Navidrome disconnect").Return(nil)
+
+				err := plugin.PlaybackReport(baseRequest("expired"))
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 
 		DescribeTable("activity name configuration",
@@ -179,42 +275,15 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return(configValue, configExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
 
-				// Connect mocks
-				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
-				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-				host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
-					return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
-				})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
-				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
-					return strings.Contains(url, "gateway.discord.gg")
-				}), mock.Anything, "testuser").Return("testuser", nil)
+				setupConnectMocks()
+				setupImageMocks()
 
-				// Capture the activity payload sent to Discord
 				var sentPayload string
 				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
 					sentPayload = args.Get(1).(string)
 				}).Return(nil)
-				host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
-				host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
 
-				// Cache mocks (Discord image processing)
-				host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
-				host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
-				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
-				host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
-				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
-
-				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
-					Username: "testuser",
-					Position: 10,
-					Track: scrobbler.TrackInfo{
-						ID:       "track1",
-						Title:    "Test Song",
-						Artist:   "Test Artist",
-						Album:    "Test Album",
-						Duration: 180,
-					},
-				})
+				err := plugin.PlaybackReport(baseRequest("playing"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
 				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"status_display_type":%d`, expectedDisplayType)))
@@ -231,47 +300,20 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
 				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return("Custom", true)
 				pdk.PDKMock.On("GetConfig", activityNameTemplateKey).Return(template, templateExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
-				pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 
-				// Connect mocks
-				host.CacheMock.On("GetInt", "discord.seq.testuser").Return(int64(0), false, errors.New("not found"))
-				gatewayResp := []byte(`{"url":"wss://gateway.discord.gg"}`)
-				host.HTTPMock.On("Send", mock.MatchedBy(func(req host.HTTPRequest) bool {
-					return req.Method == "GET" && req.URL == "https://discord.com/api/gateway"
-				})).Return(&host.HTTPResponse{StatusCode: 200, Body: gatewayResp}, nil)
-				host.WebSocketMock.On("Connect", mock.MatchedBy(func(url string) bool {
-					return strings.Contains(url, "gateway.discord.gg")
-				}), mock.Anything, "testuser").Return("testuser", nil)
+				setupConnectMocks()
+				setupImageMocks()
 
-				// Capture the activity payload sent to Discord
 				var sentPayload string
 				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
 					sentPayload = args.Get(1).(string)
 				}).Return(nil)
-				host.SchedulerMock.On("ScheduleRecurring", mock.Anything, payloadHeartbeat, "testuser").Return("testuser", nil)
-				host.SchedulerMock.On("CancelSchedule", "testuser-clear").Return(nil)
 
-				// Image mocks
-				host.CacheMock.On("GetString", discordImageKey).Return("", false, nil)
-				host.CacheMock.On("SetString", discordImageKey, mock.Anything, mock.Anything).Return(nil)
-				host.ArtworkMock.On("GetTrackUrl", "track1", int32(300)).Return("https://example.com/art.jpg", nil)
-				host.HTTPMock.On("Send", externalAssetsReq).Return(&host.HTTPResponse{StatusCode: 200, Body: []byte(`{}`)}, nil)
-				host.SchedulerMock.On("ScheduleOneTime", mock.Anything, payloadClearActivity, "testuser-clear").Return("testuser-clear", nil)
-
-				err := plugin.NowPlaying(scrobbler.NowPlayingRequest{
-					Username: "testuser",
-					Position: 10,
-					Track: scrobbler.TrackInfo{
-						ID:       "track1",
-						Title:    "Test Song",
-						Artist:   "Test Artist",
-						Album:    "Test Album",
-						Duration: 180,
-					},
-				})
+				err := plugin.PlaybackReport(baseRequest("playing"))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
 			},
@@ -282,13 +324,6 @@ var _ = Describe("discordPlugin", func() {
 			Entry("uses custom template with plain text", "Now Playing", true, "Now Playing"),
 			Entry("falls back to Navidrome when template is empty", "", false, "Navidrome"),
 		)
-	})
-
-	Describe("Scrobble", func() {
-		It("does nothing (returns nil)", func() {
-			err := plugin.Scrobble(scrobbler.ScrobbleRequest{})
-			Expect(err).ToNot(HaveOccurred())
-		})
 	})
 
 	Describe("OnCallback", func() {
@@ -304,18 +339,6 @@ var _ = Describe("discordPlugin", func() {
 				ScheduleID:  "testuser",
 				Payload:     payloadHeartbeat,
 				IsRecurring: true,
-			})
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("handles clearActivity callback", func() {
-			host.WebSocketMock.On("SendText", "testuser", mock.Anything).Return(nil)
-			host.SchedulerMock.On("CancelSchedule", "testuser").Return(nil)
-			host.WebSocketMock.On("CloseConnection", "testuser", int32(1000), "Navidrome disconnect").Return(nil)
-
-			err := plugin.OnCallback(scheduler.SchedulerCallbackRequest{
-				ScheduleID: "testuser-clear",
-				Payload:    payloadClearActivity,
 			})
 			Expect(err).ToNot(HaveOccurred())
 		})

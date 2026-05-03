@@ -3,7 +3,9 @@
 [![Build](https://github.com/navidrome/discord-rich-presence-plugin/actions/workflows/build.yml/badge.svg)](https://github.com/navidrome/discord-rich-presence-plugin/actions/workflows/build.yml)
 [![Latest](https://img.shields.io/github/v/release/navidrome/discord-rich-presence-plugin)](https://github.com/navidrome/discord-rich-presence-plugin/releases/latest/download/discord-rich-presence.ndp)
 
-**Attention: This plugin requires Navidrome 0.61.0 or later.**
+**Attention: This version (2.0.0-beta) requires a development build of Navidrome with PlaybackReport support ([navidrome/navidrome#5452](https://github.com/navidrome/navidrome/pull/5452)). It will not work with any released version of Navidrome.**
+
+**For Navidrome 0.61.x, use [plugin v1.0.0](https://github.com/navidrome/discord-rich-presence-plugin/releases/tag/v1.0.0).**
 
 This plugin integrates Navidrome with Discord Rich Presence, displaying your currently playing track in your Discord status. 
 The goal is to demonstrate the capabilities of Navidrome's plugin system by implementing a real-time presence feature using Discord's Gateway API.
@@ -16,12 +18,13 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 ## Features
 
 - Shows currently playing track with title, artist, and album art
+- Pause state with pause icon overlay and "paused for" elapsed timer
+- Playback rate-aware timestamps (correct elapsed/remaining for audiobooks at 2x, etc.)
 - Clickable track title and artist name link to Spotify (direct track link via [ListenBrainz](https://listenbrainz.org), falls back to Spotify search)
 - Clickable album art links to the Spotify track page
-- Navidrome logo overlay on album art when track artwork is available
 - Customizable activity name: "Navidrome" is default, but can be configured to display track title, artist, or album
 - Displays playback progress with start/end timestamps
-- Automatic presence clearing when track finishes
+- Automatic presence clearing when playback stops
 - Multi-user support with individual Discord tokens
 - Optional album art from [Cover Art Archive](https://coverartarchive.org) for MusicBrainz-tagged music
 - Optional image hosting via [uguu.se](https://uguu.se) for non-public Navidrome instances
@@ -163,9 +166,9 @@ The plugin implements three Navidrome capabilities:
 
 | Capability            | Purpose                                                                      |
 |-----------------------|------------------------------------------------------------------------------|
-| **Scrobbler**         | Receives `NowPlaying` events when users start playing tracks                 |
+| **Scrobbler**         | Receives `PlaybackReport` events for play/pause/stop state changes           |
 | **WebSocketCallback** | Handles incoming Discord gateway messages (heartbeat ACKs, sequence numbers) |
-| **SchedulerCallback** | Processes scheduled events for heartbeats and presence clearing              |
+| **SchedulerCallback** | Processes scheduled heartbeat events                                         |
 
 ### Host Services
 
@@ -174,18 +177,20 @@ The plugin implements three Navidrome capabilities:
 | **HTTP**        | Discord API calls (gateway discovery, external assets registration), Cover Art Archive lookups, ListenBrainz Spotify resolution |
 | **WebSocket**   | Persistent connection to Discord gateway                                                             |
 | **Cache**       | Sequence numbers, processed image URLs, resolved Spotify URLs                                        |
-| **Scheduler**   | Recurring heartbeats, one-time presence clearing                                                     |
+| **Scheduler**   | Recurring heartbeats                                                                                 |
 | **Artwork**     | Track artwork public URL resolution                                                                  |
 | **SubsonicAPI** | Fetches track artwork data for image hosting upload                                                  |
 
 ### Flow
 
-1. **Track starts playing** - Navidrome calls `NowPlaying`
-2. **Plugin connects** - If not already connected, establishes WebSocket to Discord gateway
-3. **Authentication** - Sends identify payload with user's Discord token
-4. **Presence update** - Sends activity with track info and processed artwork URL
-5. **Heartbeat loop** - Recurring scheduler sends heartbeats every 41 seconds to keep connection alive
-6. **Track ends** - One-time scheduler callback clears presence and disconnects
+1. **Playback starts** — Navidrome sends a `PlaybackReport` with state `playing`
+2. **Plugin connects** — If not already connected, establishes WebSocket to Discord gateway
+3. **Authentication** — Sends identify payload with user's Discord token
+4. **Presence update** — Sends activity with track info, timestamps, and processed artwork URL
+5. **Heartbeat loop** — Recurring scheduler sends heartbeats every 41 seconds to keep connection alive
+6. **Playback paused** — `PlaybackReport` with state `paused` updates presence with pause icon and "paused for" timer
+7. **Playback resumed** — `PlaybackReport` with state `playing` restores running timestamps
+8. **Playback stopped** — `PlaybackReport` with state `stopped` or `expired` clears presence and disconnects
 
 ### Stateless Design
 
@@ -225,7 +230,8 @@ Resolved URLs are cached (30 days for direct track links, 4 hours for search fal
 
 | File                             | Description                                                                         |
 |----------------------------------|-------------------------------------------------------------------------------------|
-| [main.go](main.go)               | Plugin entry point, scrobbler and scheduler implementations, Spotify URL resolution |
+| [main.go](main.go)               | Plugin entry point, PlaybackReport state machine, scrobbler and scheduler implementations |
+| [spotify.go](spotify.go)         | Spotify URL resolution via ListenBrainz Labs API                                    |
 | [rpc.go](rpc.go)                 | Discord gateway communication, WebSocket handling, activity management              |
 | [coverart.go](coverart.go)       | Artwork URL handling, Cover Art Archive lookups, and optional uguu.se image hosting |
 | [manifest.json](manifest.json)   | Plugin metadata and permission declarations                                         |

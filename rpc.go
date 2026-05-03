@@ -26,11 +26,8 @@ const (
 	defaultImageCacheTTL int64 = 48 * 60 * 60 // 48 hours for default Navidrome logo
 )
 
-// Scheduler callback payloads for routing
-const (
-	payloadHeartbeat     = "heartbeat"
-	payloadClearActivity = "clear-activity"
-)
+// Scheduler callback payload for routing
+const payloadHeartbeat = "heartbeat"
 
 // discordRPC handles Discord gateway communication and implements WebSocket callbacks.
 type discordRPC struct{}
@@ -95,7 +92,7 @@ type activity struct {
 
 type activityTimestamps struct {
 	Start int64 `json:"start"`
-	End   int64 `json:"end"`
+	End   int64 `json:"end,omitempty"`
 }
 
 type activityAssets struct {
@@ -237,7 +234,6 @@ func (r *discordRPC) sendActivity(clientID, username, token string, data activit
 	data.Assets.SmallURL = truncateURL(data.Assets.SmallURL)
 
 	// Try track artwork first, fall back to Navidrome logo
-	usingDefaultImage := false
 	processedImage, err := r.processImage(data.Assets.LargeImage, clientID, token, imageCacheTTL)
 	if err != nil {
 		pdk.Log(pdk.LogWarn, fmt.Sprintf("Failed to process track image for user %s: %v, falling back to default", username, err))
@@ -247,14 +243,12 @@ func (r *discordRPC) sendActivity(clientID, username, token string, data activit
 			data.Assets.LargeImage = ""
 		} else {
 			data.Assets.LargeImage = processedImage
-			usingDefaultImage = true
 		}
 	} else {
 		data.Assets.LargeImage = processedImage
 	}
 
-	// Only show SmallImage (Navidrome logo overlay) when LargeImage is actual track artwork
-	if usingDefaultImage || data.Assets.LargeImage == "" {
+	if data.Assets.LargeImage == "" {
 		data.Assets.SmallImage = ""
 		data.Assets.SmallText = ""
 	} else if data.Assets.SmallImage != "" {
@@ -461,16 +455,3 @@ func (r *discordRPC) handleHeartbeatCallback(username string) error {
 	return nil
 }
 
-// handleClearActivityCallback processes clear activity scheduler callbacks.
-func (r *discordRPC) handleClearActivityCallback(username string) error {
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("Removing presence for user %s", username))
-	if err := r.clearActivity(username); err != nil {
-		return fmt.Errorf("failed to clear activity: %w", err)
-	}
-
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("Disconnecting user %s", username))
-	if err := r.disconnect(username); err != nil {
-		return fmt.Errorf("failed to disconnect from Discord: %w", err)
-	}
-	return nil
-}
