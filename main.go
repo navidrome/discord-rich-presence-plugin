@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/navidrome/navidrome/plugins/pdk/go/pdk"
 	"github.com/navidrome/navidrome/plugins/pdk/go/scheduler"
@@ -22,12 +23,13 @@ import (
 
 // Configuration keys
 const (
-	clientIDKey     = "clientid"
-	usersKey        = "users"
-	activityNameKey = "activityname"
-	spotifyLinksKey = "spotifylinks"
-	caaEnabledKey   = "caaenabled"
-	uguuEnabledKey  = "uguuenabled"
+	clientIDKey             = "clientid"
+	usersKey                = "users"
+	activityNameKey         = "activityname"
+	activityNameTemplateKey = "activitynametemplate"
+	spotifyLinksKey         = "spotifylinks"
+	caaEnabledKey           = "caaenabled"
+	uguuEnabledKey          = "uguuenabled"
 )
 
 const (
@@ -53,6 +55,7 @@ const (
 	activityNameTrack   = "Track"
 	activityNameArtist  = "Artist"
 	activityNameAlbum   = "Album"
+	activityNameCustom  = "Custom"
 )
 
 // userToken represents a user-token mapping from the config
@@ -261,9 +264,18 @@ func resolveActivityName(track scrobbler.TrackInfo) (string, int) {
 		return track.Album, statusDisplayName
 	case activityNameArtist:
 		return track.Artist, statusDisplayName
-	default:
-		return "Navidrome", statusDisplayDetails
+	case activityNameCustom:
+		template, _ := pdk.GetConfig(activityNameTemplateKey)
+		if template != "" {
+			r := strings.NewReplacer(
+				"{track}", track.Title,
+				"{artist}", track.Artist,
+				"{album}", track.Album,
+			)
+			return r.Replace(template), statusDisplayName
+		}
 	}
+	return "Navidrome", statusDisplayDetails
 }
 
 func resolveSpotifyLinks(track scrobbler.TrackInfo) (string, string) {
