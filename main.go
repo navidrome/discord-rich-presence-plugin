@@ -267,9 +267,18 @@ func resolveActivityName(track scrobbler.TrackInfo) (string, int) {
 	case activityNameCustom:
 		template, _ := pdk.GetConfig(activityNameTemplateKey)
 		if template != "" {
+			artists := track.Artist
+			if len(track.Artists) > 0 {
+				names := make([]string, len(track.Artists))
+				for i, a := range track.Artists {
+					names[i] = a.Name
+				}
+				artists = strings.Join(names, " • ")
+			}
 			r := strings.NewReplacer(
 				"{track}", track.Title,
 				"{artist}", track.Artist,
+				"{artists}", artists,
 				"{album}", track.Album,
 			)
 			return r.Replace(template), statusDisplayName
