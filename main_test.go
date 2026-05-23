@@ -296,7 +296,7 @@ var _ = Describe("discordPlugin", func() {
 		)
 
 		DescribeTable("custom activity name template",
-			func(template string, templateExists bool, expectedName string) {
+			func(template string, templateExists bool, artists []scrobbler.ArtistRef, expectedName string) {
 				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"testuser","token":"test-token"}]`, true)
 				pdk.PDKMock.On("GetConfig", uguuEnabledKey).Return("", false)
@@ -313,16 +313,35 @@ var _ = Describe("discordPlugin", func() {
 					sentPayload = args.Get(1).(string)
 				}).Return(nil)
 
-				err := plugin.PlaybackReport(baseRequest("playing"))
+				req := baseRequest("playing")
+				req.Track.Artists = artists
+
+				err := plugin.PlaybackReport(req)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(sentPayload).To(ContainSubstring(fmt.Sprintf(`"name":"%s"`, expectedName)))
 			},
-			Entry("uses custom template with all placeholders", "{artist} - {track} ({album})", true, "Test Artist - Test Song (Test Album)"),
-			Entry("uses custom template with only track", "{track}", true, "Test Song"),
-			Entry("uses custom template with only artist", "{artist}", true, "Test Artist"),
-			Entry("uses custom template with only album", "{album}", true, "Test Album"),
-			Entry("uses custom template with plain text", "Now Playing", true, "Now Playing"),
-			Entry("falls back to Navidrome when template is empty", "", false, "Navidrome"),
+			Entry("uses custom template with all placeholders", "{artist} - {track} ({album})", true, nil, "Test Artist - Test Song (Test Album)"),
+			Entry("uses custom template with only track", "{track}", true, nil, "Test Song"),
+			Entry("uses custom template with only artist", "{artist}", true, nil, "Test Artist"),
+			Entry("uses custom template with only album", "{album}", true, nil, "Test Album"),
+			Entry("uses custom template with plain text", "Now Playing", true, nil, "Now Playing"),
+			Entry("falls back to Navidrome when template is empty", "", false, nil, "Navidrome"),
+			Entry("renders {artists} joined with bullet for multiple artists",
+				"{artists}", true,
+				[]scrobbler.ArtistRef{{Name: "Borgore"}, {Name: "Miley Cyrus"}},
+				"Borgore • Miley Cyrus"),
+			Entry("renders {artists} as single name when only one artist",
+				"{artists}", true,
+				[]scrobbler.ArtistRef{{Name: "Solo Artist"}},
+				"Solo Artist"),
+			Entry("falls back to track.Artist when Artists is empty",
+				"{artists}", true,
+				nil,
+				"Test Artist"),
+			Entry("combines {artists} with other placeholders",
+				"{artists} - {track}", true,
+				[]scrobbler.ArtistRef{{Name: "A"}, {Name: "B"}},
+				"A • B - Test Song"),
 		)
 	})
 
