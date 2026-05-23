@@ -65,7 +65,7 @@
         "activitynametemplate": {
           "type": "string",
           "title": "Custom Activity Name Template",
-          "description": "Template for the activity name. Available placeholders: {track}, {artist}, {album}",
+          "description": "Template for the activity name. Available placeholders: {track}, {artist}, {artists}, {album}",
           "default": "{artist} - {track}"
         },
         "caaenabled": {
