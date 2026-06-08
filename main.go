@@ -65,13 +65,6 @@ type userToken struct {
 	Token    string `json:"token"`
 }
 
-// pluginConfig represents the plugin config
-type pluginConfig struct {
-	clientID       string
-	users          map[string]string
-	presenceStatus string
-}
-
 // discordPlugin implements the scrobbler and scheduler interfaces.
 type discordPlugin struct{}
 
