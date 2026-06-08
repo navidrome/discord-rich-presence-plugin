@@ -26,6 +26,7 @@ const (
 	clientIDKey             = "clientid"
 	usersKey                = "users"
 	activityNameKey         = "activityname"
+	presenceStatusKey       = "presencestatus"
 	activityNameTemplateKey = "activitynametemplate"
 	spotifyLinksKey         = "spotifylinks"
 	caaEnabledKey           = "caaenabled"
@@ -62,6 +63,13 @@ const (
 type userToken struct {
 	Username string `json:"username"`
 	Token    string `json:"token"`
+}
+
+// pluginConfig represents the plugin config
+type pluginConfig struct {
+	clientID       string
+	users          map[string]string
+	presenceStatus string
 }
 
 // discordPlugin implements the scrobbler and scheduler interfaces.
@@ -118,6 +126,17 @@ func getConfig() (clientID string, users map[string]string, err error) {
 	}
 
 	return clientID, users, nil
+}
+
+// getPresenceStatusFromConfig gets the configured presence status
+func getPresenceStatusFromConfig() string {
+	presenceStatus, ok := pdk.GetConfig(presenceStatusKey)
+	if !ok || presenceStatus == "" {
+		pdk.Log(pdk.LogWarn, "missing PresenceStatus in configuration")
+		return ""
+	}
+
+	return presenceStatus
 }
 
 // ============================================================================
@@ -177,6 +196,9 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		return err
 	}
 
+	// Load presence status
+	presenceStatus := getPresenceStatusFromConfig()
+
 	activityName, statusDisplayType := resolveActivityName(input.Track)
 
 	spotifyURL, artistSearchURL := resolveSpotifyLinks(input.Track)
@@ -217,7 +239,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		StatusDisplayType: statusDisplayType,
 		Timestamps:        ts,
 		Assets:            assets,
-	})
+	}, presenceStatus)
 }
 
 func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) error {

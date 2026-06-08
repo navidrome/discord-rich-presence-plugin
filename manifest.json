@@ -85,6 +85,26 @@
           "description": "When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page",
           "default": false
         },
+        "presencestatus": {
+          "type": "string",
+          "title": "User Presence Status",
+          "description": "Choose the status displayed for the user on Discord",
+          "oneOf": [
+            {
+              "const": "online",
+              "title": "Online"
+            },
+            {
+              "const": "idle",
+              "title": "Idle"
+            },
+            {
+              "const": "dnd",
+              "title": "Do Not Disturb"
+            }
+          ],
+          "default": "dnd"
+        },
         "users": {
           "type": "array",
           "title": "User Tokens",
@@ -156,6 +176,13 @@
         {
           "type": "Control",
           "scope": "#/properties/spotifylinks"
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/presencestatus",
+          "options": {
+            "format": "radio"
+          }
         },
         {
           "type": "Control",
