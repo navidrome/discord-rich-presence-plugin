@@ -59,10 +59,11 @@ const (
 	activityNameCustom  = "Custom"
 )
 
-// userToken represents a user-token mapping from the config
-type userToken struct {
-	Username string `json:"username"`
-	Token    string `json:"token"`
+// userConfig represents a user-token mapping from the config
+type userConfig struct {
+	Username       string `json:"username"`
+	Token          string `json:"token"`
+	PresenceStatus string `json:"presencestatus"`
 }
 
 // discordPlugin implements the scrobbler and scheduler interfaces.
@@ -79,7 +80,7 @@ func init() {
 }
 
 // getConfig loads the plugin configuration.
-func getConfig() (clientID string, users map[string]string, err error) {
+func getConfig() (clientID string, users map[string]userConfig, err error) {
 	clientID, ok := pdk.GetConfig(clientIDKey)
 	if !ok || clientID == "" {
 		pdk.Log(pdk.LogWarn, "missing ClientID in configuration")
@@ -94,22 +95,22 @@ func getConfig() (clientID string, users map[string]string, err error) {
 	}
 
 	// Parse the JSON array
-	var userTokens []userToken
-	if err := json.Unmarshal([]byte(usersJSON), &userTokens); err != nil {
+	var userConfigs []userConfig
+	if err := json.Unmarshal([]byte(usersJSON), &userConfigs); err != nil {
 		pdk.Log(pdk.LogError, fmt.Sprintf("failed to parse users config: %v", err))
 		return clientID, nil, nil
 	}
 
-	if len(userTokens) == 0 {
+	if len(userConfigs) == 0 {
 		pdk.Log(pdk.LogWarn, "no users configured")
 		return clientID, nil, nil
 	}
 
 	// Build the users map
-	users = make(map[string]string)
-	for _, ut := range userTokens {
-		if ut.Username != "" && ut.Token != "" {
-			users[ut.Username] = ut.Token
+	users = make(map[string]userConfig)
+	for _, uc := range userConfigs {
+		if uc.Username != "" && uc.Token != "" {
+			users[uc.Username] = uc
 		}
 	}
 
@@ -119,17 +120,6 @@ func getConfig() (clientID string, users map[string]string, err error) {
 	}
 
 	return clientID, users, nil
-}
-
-// getPresenceStatusFromConfig gets the configured presence status
-func getPresenceStatusFromConfig() string {
-	presenceStatus, ok := pdk.GetConfig(presenceStatusKey)
-	if !ok || presenceStatus == "" {
-		pdk.Log(pdk.LogWarn, "missing PresenceStatus in configuration")
-		return ""
-	}
-
-	return presenceStatus
 }
 
 // ============================================================================
@@ -184,13 +174,10 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 	paused := input.State == statePaused
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Setting presence for user %s, track: %s (paused=%v)", input.Username, input.Track.Title, paused))
 
-	clientID, userToken, err := connectUser(input.Username)
+	clientID, userConfig, err := connectUser(input.Username)
 	if err != nil {
 		return err
 	}
-
-	// Load presence status
-	presenceStatus := getPresenceStatusFromConfig()
 
 	activityName, statusDisplayType := resolveActivityName(input.Track)
 
@@ -221,7 +208,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		assets.SmallText = "Paused"
 	}
 
-	return rpc.sendActivity(clientID, input.Username, userToken, activity{
+	return rpc.sendActivity(clientID, input.Username, userConfig.Token, activity{
 		Application:       clientID,
 		Name:              activityName,
 		Type:              2,
@@ -232,7 +219,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		StatusDisplayType: statusDisplayType,
 		Timestamps:        ts,
 		Assets:            assets,
-	}, presenceStatus)
+	}, userConfig.PresenceStatus)
 }
 
 func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) error {
@@ -250,24 +237,24 @@ func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) err
 	return nil
 }
 
-func connectUser(username string) (clientID, token string, err error) {
+func connectUser(username string) (clientID string, config userConfig, err error) {
 	clientID, users, err := getConfig()
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get config: %w", err)
+		return "", userConfig{}, fmt.Errorf("failed to get config: %w", err)
 	}
 	if clientID == "" {
-		return "", "", fmt.Errorf("missing ClientID in configuration")
+		return "", userConfig{}, fmt.Errorf("missing ClientID in configuration")
 	}
 
-	token, authorized := users[username]
+	config, authorized := users[username]
 	if !authorized {
-		return "", "", fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, username)
+		return "", userConfig{}, fmt.Errorf("%w: user '%s' not authorized", scrobbler.ScrobblerErrorNotAuthorized, username)
 	}
 
-	if err := rpc.connect(username, token); err != nil {
-		return "", "", fmt.Errorf("failed to connect to Discord: %w", err)
+	if err := rpc.connect(username, config.Token); err != nil {
+		return "", userConfig{}, fmt.Errorf("failed to connect to Discord: %w", err)
 	}
-	return clientID, token, nil
+	return clientID, config, nil
 }
 
 func resolveActivityName(track scrobbler.TrackInfo) (string, int) {
