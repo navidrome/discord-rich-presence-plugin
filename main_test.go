@@ -150,7 +150,6 @@ var _ = Describe("discordPlugin", func() {
 			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
-			pdk.PDKMock.On("GetConfig", presenceStatusKey).Return("", false)
 		}
 
 		setupImageMocks := func() {
@@ -178,7 +177,6 @@ var _ = Describe("discordPlugin", func() {
 			It("returns not authorized error when user not in config", func() {
 				pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
 				pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"otheruser","token":"token"}]`, true)
-				pdk.PDKMock.On("GetConfig", presenceStatusKey).Return("", false)
 
 				err := plugin.PlaybackReport(baseRequest("playing"))
 				Expect(err).To(HaveOccurred())
@@ -284,7 +282,6 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return(configValue, configExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
-				pdk.PDKMock.On("GetConfig", presenceStatusKey).Return("", false)
 
 				setupConnectMocks()
 				setupImageMocks()
@@ -315,7 +312,6 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return("Custom", true)
 				pdk.PDKMock.On("GetConfig", activityNameTemplateKey).Return(template, templateExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
-				pdk.PDKMock.On("GetConfig", presenceStatusKey).Return("", false)
 
 				setupConnectMocks()
 				setupImageMocks()

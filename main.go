@@ -26,7 +26,6 @@ const (
 	clientIDKey             = "clientid"
 	usersKey                = "users"
 	activityNameKey         = "activityname"
-	presenceStatusKey       = "presencestatus"
 	activityNameTemplateKey = "activitynametemplate"
 	spotifyLinksKey         = "spotifylinks"
 	caaEnabledKey           = "caaenabled"
