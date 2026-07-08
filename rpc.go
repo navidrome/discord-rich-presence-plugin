@@ -58,6 +58,26 @@ const (
 	maxURLLength  = 256 // Max characters for URL fields (details_url, state_url, etc.)
 )
 
+// Discord User Presence status strings
+const (
+	presenceStatusOnline       = "online"
+	presenceStatusIdle         = "idle"
+	presenceStatusDoNotDisturb = "dnd"
+
+	defaultPresenceStatus = presenceStatusDoNotDisturb
+)
+
+func isValidPresenceStatus(status string) bool {
+	switch status {
+	case presenceStatusOnline,
+		presenceStatusIdle,
+		presenceStatusDoNotDisturb:
+		return true
+	default:
+		return false
+	}
+}
+
 // truncateText truncates s to maxTextLength runes, appending "…" if truncated.
 func truncateText(s string) string {
 	runes := []rune(s)
@@ -218,7 +238,7 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, ttl int64) (
 // ============================================================================
 
 // sendActivity sends an activity update to Discord.
-func (r *discordRPC) sendActivity(clientID, username, token string, data activity) error {
+func (r *discordRPC) sendActivity(clientID, username, token string, data activity, presenceStatus string, since int64) error {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Sending activity for user %s: %s - %s", username, data.Details, data.State))
 
 	// Truncate text fields to Discord's 128-character limit
@@ -262,10 +282,17 @@ func (r *discordRPC) sendActivity(clientID, username, token string, data activit
 		}
 	}
 
+	status := presenceStatus
+	if !isValidPresenceStatus(status) {
+		pdk.Log(pdk.LogWarn, fmt.Sprintf("Invalid presence status '%s'. Using '%s'", status, defaultPresenceStatus))
+		status = defaultPresenceStatus
+	}
+
 	presence := presencePayload{
 		Activities: []activity{data},
-		Status:     "dnd",
-		Afk:        false,
+		Since:      since,
+		Status:     status,
+		Afk:        true,
 	}
 	return r.sendMessage(username, presenceOpCode, presence)
 }
@@ -454,4 +481,3 @@ func (r *discordRPC) handleHeartbeatCallback(username string) error {
 	}
 	return nil
 }
-

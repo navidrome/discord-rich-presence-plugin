@@ -332,7 +332,7 @@ var _ = Describe("discordRPC", func() {
 					SmallImage: navidromeLogoURL,
 					SmallText:  "Navidrome",
 				},
-			})
+			}, defaultPresenceStatus, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -364,7 +364,7 @@ var _ = Describe("discordRPC", func() {
 					SmallImage: navidromeLogoURL,
 					SmallText:  "Navidrome",
 				},
-			})
+			}, defaultPresenceStatus, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -391,7 +391,7 @@ var _ = Describe("discordRPC", func() {
 					SmallImage: navidromeLogoURL,
 					SmallText:  "Navidrome",
 				},
-			})
+			}, defaultPresenceStatus, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -419,7 +419,7 @@ var _ = Describe("discordRPC", func() {
 					SmallImage: navidromeLogoURL,
 					SmallText:  "Navidrome",
 				},
-			})
+			}, defaultPresenceStatus, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -479,7 +479,7 @@ var _ = Describe("discordRPC", func() {
 					SmallText:  "Navidrome",
 					SmallURL:   longURL,
 				},
-			})
+			}, defaultPresenceStatus, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})

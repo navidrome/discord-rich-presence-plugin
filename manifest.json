@@ -87,8 +87,8 @@
         },
         "users": {
           "type": "array",
-          "title": "User Tokens",
-          "description": "Discord tokens for each Navidrome user. WARNING: Store tokens securely!",
+          "title": "User Configurations",
+          "description": "Discord configuration for each Navidrome user. WARNING: Store tokens securely!",
           "minItems": 1,
           "items": {
             "type": "object",
@@ -104,11 +104,32 @@
                 "title": "Discord Token",
                 "description": "The user's Discord token (keep this secret!)",
                 "minLength": 1
+              },
+              "presencestatus": {
+                "type": "string",
+                "title": "User Presence Status",
+                "description": "Choose the status displayed for the user on Discord",
+                "oneOf": [
+                  {
+                    "const": "online",
+                    "title": "Online"
+                  },
+                  {
+                    "const": "idle",
+                    "title": "Idle"
+                  },
+                  {
+                    "const": "dnd",
+                    "title": "Do Not Disturb"
+                  }
+                ],
+                "default": "dnd"
               }
             },
             "required": [
               "username",
-              "token"
+              "token",
+              "presencestatus"
             ]
           }
         }
@@ -175,6 +196,10 @@
                   "options": {
                     "format": "password"
                   }
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/presencestatus"
                 }
               ]
             }

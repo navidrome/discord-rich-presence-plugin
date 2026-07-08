@@ -40,15 +40,23 @@ var _ = Describe("discordPlugin", func() {
 	Describe("getConfig", func() {
 		It("returns config values when properly set", func() {
 			pdk.PDKMock.On("GetConfig", clientIDKey).Return("test-client-id", true)
-			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"user1","token":"token1"},{"username":"user2","token":"token2"}]`, true)
+			pdk.PDKMock.On("GetConfig", usersKey).Return(`[{"username":"user1","token":"token1","presencestatus":"online"},{"username":"user2","token":"token2","presencestatus":"away"}]`, true)
 			pdk.PDKMock.On("Log", mock.Anything, mock.Anything).Maybe()
 
 			clientID, users, err := getConfig()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(clientID).To(Equal("test-client-id"))
 			Expect(users).To(HaveLen(2))
-			Expect(users["user1"]).To(Equal("token1"))
-			Expect(users["user2"]).To(Equal("token2"))
+			Expect(users["user1"]).To(Equal(userConfig{
+				Username:       "user1",
+				Token:          "token1",
+				PresenceStatus: "online",
+			}))
+			Expect(users["user2"]).To(Equal(userConfig{
+				Username:       "user2",
+				Token:          "token2",
+				PresenceStatus: "away",
+			}))
 		})
 
 		It("returns empty client ID when not set", func() {
