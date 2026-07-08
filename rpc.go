@@ -238,7 +238,7 @@ func (r *discordRPC) processImage(imageURL, clientID, token string, ttl int64) (
 // ============================================================================
 
 // sendActivity sends an activity update to Discord.
-func (r *discordRPC) sendActivity(clientID, username, token string, data activity, presenceStatus string) error {
+func (r *discordRPC) sendActivity(clientID, username, token string, data activity, presenceStatus string, since int64) error {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Sending activity for user %s: %s - %s", username, data.Details, data.State))
 
 	// Truncate text fields to Discord's 128-character limit
@@ -290,8 +290,9 @@ func (r *discordRPC) sendActivity(clientID, username, token string, data activit
 
 	presence := presencePayload{
 		Activities: []activity{data},
+		Since:      since,
 		Status:     status,
-		Afk:        false,
+		Afk:        true,
 	}
 	return r.sendMessage(username, presenceOpCode, presence)
 }

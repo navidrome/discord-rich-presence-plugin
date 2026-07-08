@@ -218,7 +218,7 @@ func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequ
 		StatusDisplayType: statusDisplayType,
 		Timestamps:        ts,
 		Assets:            assets,
-	}, userConfig.PresenceStatus)
+	}, userConfig.PresenceStatus, ts.Start)
 }
 
 func (p *discordPlugin) handleStopped(input scrobbler.PlaybackReportRequest) error {
