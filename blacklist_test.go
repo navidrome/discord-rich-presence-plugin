@@ -10,7 +10,7 @@ import (
 )
 
 var _ = Describe("isBlacklisted", func() {
-	const usersConfig = `[{"username":"user1","token":"token1","blacklist":["9O3pkfh2MhOJM1OPYJSTsh"]}]`
+	const usersConfig = `[{"username":"user1","token":"token1","blacklist":["9O3pkfh2MhOJM1OPYJSTsh",""]}]`
 
 	BeforeEach(func() {
 		pdk.ResetMock()
@@ -31,5 +31,10 @@ var _ = Describe("isBlacklisted", func() {
 	It("applies the blacklist only to its own user", func() {
 		track := scrobbler.TrackInfo{ID: "9O3pkfh2MhOJM1OPYJSTsh"}
 		Expect(isBlacklisted("user2", track)).To(BeFalse())
+	})
+
+	It("does not blacklist a track with an empty ID", func() {
+		track := scrobbler.TrackInfo{ID: "   "}
+		Expect(isBlacklisted("user1", track)).To(BeFalse())
 	})
 })

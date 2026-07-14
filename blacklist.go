@@ -36,6 +36,9 @@ func userBlacklists() map[string][]string {
 // done on the Navidrome track ID, which is unique to every track.
 func isBlacklisted(username string, track scrobbler.TrackInfo) bool {
 	id := strings.TrimSpace(track.ID)
+	if id == "" {
+		return false
+	}
 	for _, item := range userBlacklists()[username] {
 		if strings.TrimSpace(item) == id {
 			return true
