@@ -60,8 +60,9 @@ const (
 
 // userToken represents a user-token mapping from the config
 type userToken struct {
-	Username string `json:"username"`
-	Token    string `json:"token"`
+	Username  string   `json:"username"`
+	Token     string   `json:"token"`
+	Blacklist []string `json:"blacklist,omitempty"`
 }
 
 // discordPlugin implements the scrobbler and scheduler interfaces.
@@ -169,6 +170,16 @@ func formatRequest(input scrobbler.PlaybackReportRequest) string {
 }
 
 func (p *discordPlugin) handlePlayingOrPaused(input scrobbler.PlaybackReportRequest) error {
+	// Never expose a blacklisted track. If a previous track left a presence
+	// showing, clear it; otherwise there is nothing to do.
+	if isBlacklisted(input.Username, input.Track) {
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("Track %q is blacklisted for user %s, clearing presence", input.Track.Title, input.Username))
+		if rpc.isConnected(input.Username) {
+			return rpc.clearActivity(input.Username)
+		}
+		return nil
+	}
+
 	paused := input.State == statePaused
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Setting presence for user %s, track: %s (paused=%v)", input.Username, input.Track.Title, paused))
 

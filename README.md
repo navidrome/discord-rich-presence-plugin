@@ -24,6 +24,7 @@ Based on the [Navicord](https://github.com/logixism/navicord) project.
 - Displays playback progress with start/end timestamps
 - Automatic presence clearing when playback stops
 - Multi-user support with individual Discord tokens
+- Per-user blacklist to hide specific tracks from Rich Presence
 - Optional album art from [Cover Art Archive](https://coverartarchive.org) for MusicBrainz-tagged music
 - Optional image hosting via [uguu.se](https://uguu.se) for non-public Navidrome instances
 
@@ -166,6 +167,12 @@ Add each Navidrome user who wants Discord Rich Presence. For each user, provide:
 - **Username**: The Navidrome login username (case-sensitive)
 - **Token**: The Discord user token (see Step 3 in Installation for how to obtain this)
 
+#### Blacklisted Track IDs
+- **What it is**: A per-user list of tracks to hide from Discord Rich Presence. When a blacklisted track plays, the plugin clears your presence instead of showing it.
+- **How to add**: Expand a user in the **Users** list and add one Navidrome track ID per entry.
+- **How to find a track's ID**: In Navidrome, open the track's context menu and choose **Share** — the track ID is the identifier at the end of the share link.
+- **Why track IDs**: IDs are unique to every track, so a blacklisted song is matched unambiguously — unlike a title, which two different tracks could share.
+
 ## How It Works
 
 ### Plugin Capabilities
@@ -239,6 +246,7 @@ Resolved URLs are cached (30 days for direct track links, 4 hours for search fal
 | File                             | Description                                                                         |
 |----------------------------------|-------------------------------------------------------------------------------------|
 | [main.go](main.go)               | Plugin entry point, PlaybackReport state machine, scrobbler and scheduler implementations |
+| [blacklist.go](blacklist.go)     | Per-user track blacklist matching                                                   |
 | [spotify.go](spotify.go)         | Spotify URL resolution via ListenBrainz Labs API                                    |
 | [rpc.go](rpc.go)                 | Discord gateway communication, WebSocket handling, activity management              |
 | [coverart.go](coverart.go)       | Artwork URL handling, Cover Art Archive lookups, and optional uguu.se image hosting |

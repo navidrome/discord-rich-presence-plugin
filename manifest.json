@@ -104,6 +104,14 @@
                 "title": "Discord Token",
                 "description": "The user's Discord token (keep this secret!)",
                 "minLength": 1
+              },
+              "blacklist": {
+                "type": "array",
+                "title": "Blacklisted Track IDs",
+                "description": "Navidrome track IDs to hide from Rich Presence for this user.",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -175,6 +183,10 @@
                   "options": {
                     "format": "password"
                   }
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/blacklist"
                 }
               ]
             }
