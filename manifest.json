@@ -85,6 +85,12 @@
           "description": "When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page",
           "default": false
         },
+        "clearonpause": {
+          "type": "boolean",
+          "title": "Clear activity on pause",
+          "description": "When enabled, a player pausing will clear the activity",
+          "default": false
+        },
         "users": {
           "type": "array",
           "title": "User Tokens",
@@ -156,6 +162,10 @@
         {
           "type": "Control",
           "scope": "#/properties/spotifylinks"
+        },
+        {
+          "type": "Control",
+          "scope": "#/properties/clearonpause"
         },
         {
           "type": "Control",

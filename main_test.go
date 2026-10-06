@@ -142,6 +142,7 @@ var _ = Describe("discordPlugin", func() {
 			pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", activityNameKey).Return("", false)
 			pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+			pdk.PDKMock.On("GetConfig", clearOnPauseKey).Return("", false)
 		}
 
 		setupImageMocks := func() {
@@ -219,7 +220,7 @@ var _ = Describe("discordPlugin", func() {
 			})
 		})
 
-		Context("paused state", func() {
+		Context("paused state with clearonpause disabled", func() {
 			It("sends activity with frozen timestamps and pause icon overlay", func() {
 				setupConfigMocks()
 				setupConnectMocks()
@@ -237,6 +238,25 @@ var _ = Describe("discordPlugin", func() {
 				Expect(sentPayload).ToNot(ContainSubstring(`"end":`))
 				// Paused start = Timestamp * 1000 = 1714600000000
 				Expect(sentPayload).To(ContainSubstring(`"start":1714600000000`))
+			})
+		})
+
+		Context("paused state with clearonpause enabled", func() {
+			It("clears activity", func() {
+				pdk.PDKMock.On("GetConfig", clearOnPauseKey).Return("true", true)
+				setupConfigMocks()
+				setupConnectMocks()
+
+				var sentPayload string
+				host.WebSocketMock.On("SendText", "testuser", mock.Anything).Run(func(args mock.Arguments) {
+					sentPayload = args.Get(1).(string)
+				}).Return(nil)
+
+				err := plugin.PlaybackReport(baseRequest("paused"))
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(sentPayload).To(ContainSubstring(`"op":3`))
+				Expect(sentPayload).To(ContainSubstring(`"activities":null`))
 			})
 		})
 
@@ -274,6 +294,7 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", caaEnabledKey).Return("", false)
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return(configValue, configExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", clearOnPauseKey).Return("", false)
 
 				setupConnectMocks()
 				setupImageMocks()
@@ -304,6 +325,7 @@ var _ = Describe("discordPlugin", func() {
 				pdk.PDKMock.On("GetConfig", activityNameKey).Return("Custom", true)
 				pdk.PDKMock.On("GetConfig", activityNameTemplateKey).Return(template, templateExists)
 				pdk.PDKMock.On("GetConfig", spotifyLinksKey).Return("", false)
+				pdk.PDKMock.On("GetConfig", clearOnPauseKey).Return("", false)
 
 				setupConnectMocks()
 				setupImageMocks()

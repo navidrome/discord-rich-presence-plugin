@@ -55,6 +55,7 @@ We don't provide instructions for obtaining the token as it may violate Discord'
    - **Use artwork from Cover Art Archive**: Enable this if your music has MusicBrainz tags (see Album Art section below)
    - **Upload to uguu.se**: Enable this if your Navidrome isn't publicly accessible (see Album Art section below)
    - **Enable Spotify link-through**: Enable this to make track title and album art clickable links to Spotify
+   - **Clear activity on pause**: Enable this to clear your activity when you pause
    - **Users**: Add your Navidrome username and Discord token from Step 3
 
 ### Step 5: Enable Discord Activity Sharing
@@ -161,6 +162,10 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
 - **What it does**: When enabled, clicking the track title or album art in Discord opens the corresponding Spotify page
 - **How it works**: Track URLs are resolved via [ListenBrainz Labs](https://labs.api.listenbrainz.org) for direct Spotify links, falling back to Spotify search when no match is found
 
+#### Clear activity on pause
+- **Default**: Disabled
+- **What it does**: When enabled, pausing playback clears the Discord activity instead of displaying the paused icon and duration
+
 #### Users
 Add each Navidrome user who wants Discord Rich Presence. For each user, provide:
 - **Username**: The Navidrome login username (case-sensitive)
@@ -196,7 +201,7 @@ The plugin implements three Navidrome capabilities:
 3. **Authentication** — Sends identify payload with user's Discord token
 4. **Presence update** — Sends activity with track info, timestamps, and processed artwork URL
 5. **Heartbeat loop** — Recurring scheduler sends heartbeats every 41 seconds to keep connection alive
-6. **Playback paused** — `PlaybackReport` with state `paused` updates presence with pause icon and "paused for" timer
+6. **Playback paused** — If `clearOnPause` is disabled, `PlaybackReport` with state `paused` updates presence with pause icon and "paused for" timer. If `clearOnPause` is enabled, presence is cleared.
 7. **Playback resumed** — `PlaybackReport` with state `playing` restores running timestamps
 8. **Playback stopped** — `PlaybackReport` with state `stopped` or `expired` clears presence and disconnects
 
