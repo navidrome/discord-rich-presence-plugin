@@ -50,7 +50,7 @@ We don't provide instructions for obtaining the token as it may violate Discord'
 1. Open Navidrome and go to **Settings > Plugins > Discord Rich Presence**
 2. Fill in the configuration:
    - **Client ID**: Your Discord Application ID from Step 2
-    - **Activity Name Display**: Choose what to show as the activity name (Default, Track, Album, Artist)
+    - **Activity Name Display**: Choose what to show as the activity name (Default, Track, Album, Artist, Album Artist)
       - "Default" is recommended to help spread awareness of your favorite music server 😉, but feel free to choose the option that best suits your preferences
    - **Use artwork from Cover Art Archive**: Enable this if your music has MusicBrainz tags (see Album Art section below)
    - **Upload to uguu.se**: Enable this if your Navidrome isn't publicly accessible (see Album Art section below)
@@ -135,6 +135,7 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
   - **Track**: Shows the currently playing track title
   - **Album**: Shows the currently playing track's album name
   - **Artist**: Shows the currently playing track's artist name
+  - **AlbumArtist**: Shows the currently playing track's album artist name
   - **Custom**: Uses a template string with placeholders (see **Custom Activity Name Template** below)
 
 #### Custom Activity Name Template
@@ -144,6 +145,8 @@ Access the plugin configuration in Navidrome: **Settings > Plugins > Discord Ric
   - `{track}` — The track title
   - `{artist}` — The track's primary artist name
   - `{artists}` — All track artists joined with ` • ` (e.g., `Borgore • Miley Cyrus`). Falls back to the value of `{artist}` when individual artist metadata is unavailable.
+  - `{albumartist}` — The track's primary artist name
+  - `{albumartists}` — All track album artists joined with ` • `. Falls back to `{albumartists}` when individual album artist metadata is unavailable.
   - `{album}` — The album name
 
 #### Use artwork from Cover Art Archive

@@ -51,11 +51,12 @@ const (
 
 // Activity name display options
 const (
-	activityNameDefault = "Default"
-	activityNameTrack   = "Track"
-	activityNameArtist  = "Artist"
-	activityNameAlbum   = "Album"
-	activityNameCustom  = "Custom"
+	activityNameDefault     = "Default"
+	activityNameTrack       = "Track"
+	activityNameArtist      = "Artist"
+	activityNameAlbumArtist = "AlbumArtist"
+	activityNameAlbum       = "Album"
+	activityNameCustom      = "Custom"
 )
 
 // userToken represents a user-token mapping from the config
@@ -264,27 +265,39 @@ func resolveActivityName(track scrobbler.TrackInfo) (string, int) {
 		return track.Album, statusDisplayName
 	case activityNameArtist:
 		return track.Artist, statusDisplayName
+	case activityNameAlbumArtist:
+		return track.AlbumArtist, statusDisplayName
 	case activityNameCustom:
 		template, _ := pdk.GetConfig(activityNameTemplateKey)
 		if template != "" {
 			artists := track.Artist
+			albumArtists := track.AlbumArtist
 			if len(track.Artists) > 0 {
-				names := make([]string, len(track.Artists))
-				for i, a := range track.Artists {
-					names[i] = a.Name
-				}
-				artists = strings.Join(names, " • ")
+				artists = combineArtists(track.Artists)
+			}
+			if len(track.AlbumArtists) > 0 {
+				albumArtists = combineArtists(track.AlbumArtists)
 			}
 			r := strings.NewReplacer(
 				"{track}", track.Title,
 				"{artist}", track.Artist,
+				"{albumartist}", track.AlbumArtist,
 				"{artists}", artists,
+				"{albumartists}", albumArtists,
 				"{album}", track.Album,
 			)
 			return r.Replace(template), statusDisplayName
 		}
 	}
 	return "Navidrome", statusDisplayDetails
+}
+
+func combineArtists(artists []scrobbler.ArtistRef) string {
+	names := make([]string, len(artists))
+	for i, a := range artists {
+		names[i] = a.Name
+	}
+	return strings.Join(names, " • ")
 }
 
 func resolveSpotifyLinks(track scrobbler.TrackInfo) (string, string) {
