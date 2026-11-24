@@ -114,11 +114,12 @@ var _ = Describe("discordPlugin", func() {
 				PlaybackRate: 1.0,
 				Timestamp:    1714600000,
 				Track: scrobbler.TrackInfo{
-					ID:       "track1",
-					Title:    "Test Song",
-					Artist:   "Test Artist",
-					Album:    "Test Album",
-					Duration: 180,
+					ID:          "track1",
+					Title:       "Test Song",
+					Artist:      "Test Artist",
+					AlbumArtist: "Test Album Artist",
+					Album:       "Test Album",
+					Duration:    180,
 				},
 			}
 		}
@@ -293,6 +294,7 @@ var _ = Describe("discordPlugin", func() {
 			Entry("uses track title when configured", "Track", true, "Test Song", 0),
 			Entry("uses track album when configured", "Album", true, "Test Album", 0),
 			Entry("uses track artist when configured", "Artist", true, "Test Artist", 0),
+			Entry("uses track album artist when configured", "AlbumArtist", true, "Test Album Artist", 0),
 		)
 
 		DescribeTable("custom activity name template",
@@ -323,6 +325,7 @@ var _ = Describe("discordPlugin", func() {
 			Entry("uses custom template with all placeholders", "{artist} - {track} ({album})", true, nil, "Test Artist - Test Song (Test Album)"),
 			Entry("uses custom template with only track", "{track}", true, nil, "Test Song"),
 			Entry("uses custom template with only artist", "{artist}", true, nil, "Test Artist"),
+			Entry("uses custom template with only album artist", "{albumartist}", true, nil, "Test Album Artist"),
 			Entry("uses custom template with only album", "{album}", true, nil, "Test Album"),
 			Entry("uses custom template with plain text", "Now Playing", true, nil, "Now Playing"),
 			Entry("falls back to Navidrome when template is empty", "", false, nil, "Navidrome"),
@@ -338,6 +341,10 @@ var _ = Describe("discordPlugin", func() {
 				"{artists}", true,
 				nil,
 				"Test Artist"),
+			Entry("falls back to track.AlbumArtist when AlbumArtists is empty",
+				"{albumartists}", true,
+				nil,
+				"Test Album Artist"),
 			Entry("combines {artists} with other placeholders",
 				"{artists} - {track}", true,
 				[]scrobbler.ArtistRef{{Name: "A"}, {Name: "B"}},

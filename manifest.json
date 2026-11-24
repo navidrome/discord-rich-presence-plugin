@@ -58,6 +58,7 @@
             "Track",
             "Album",
             "Artist",
+            "AlbumArtist",
             "Custom"
           ],
           "default": "Default"
@@ -65,7 +66,7 @@
         "activitynametemplate": {
           "type": "string",
           "title": "Custom Activity Name Template",
-          "description": "Template for the activity name. Available placeholders: {track}, {artist}, {artists}, {album}",
+          "description": "Template for the activity name. Available placeholders: {track}, {artist}, {artists}, {albumartist}, {albumartists}, {album}",
           "default": "{artist} - {track}"
         },
         "caaenabled": {
